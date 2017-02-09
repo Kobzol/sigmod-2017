@@ -1,16 +1,23 @@
 #pragma once
 
 #include <string>
+#include <vector>
+#include "settings.h"
 
 class Word
 {
 public:
-    Word(std::string word): word(word), active(true)
+    Word(std::vector<DictHash> hashList): hashList(hashList), active(true)
     {
 
     }
 
-    std::string word;
+    bool operator==(const Word& other)
+    {
+        return other.hashList == this->hashList;
+    }
+
+    std::vector<DictHash> hashList;
     bool active;
 };
 

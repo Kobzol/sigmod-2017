@@ -7,3 +7,5 @@
 #endif
 
 //#define PRINT_STATISTICS
+
+using DictHash = unsigned int;

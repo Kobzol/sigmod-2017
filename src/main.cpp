@@ -4,12 +4,14 @@
 #include <regex>
 #include <unordered_map>
 #include <unordered_set>
-#include <sstream>
 
 #include "settings.h"
 #include "word.h"
+#include "dictionary.h"
 
 static int query_id = 0;
+static Dictionary dict;
+static std::unordered_map<DictHash, std::vector<int>> prefixMap;
 
 std::vector<Word> load_init_data(std::istream& input)
 {
@@ -26,69 +28,46 @@ std::vector<Word> load_init_data(std::istream& input)
         }
         else
         {
-            ngrams.emplace_back(line);
+            ngrams.emplace_back(dict.createWord(line));
         }
     }
 
     return ngrams;
 }
 
-std::string find_prefix(std::string word)
+void find_in_document(std::string line, const std::vector<Word>& ngrams)
 {
-    auto pos = word.find(' ');
-
-    if (pos == std::string::npos)
-    {
-        return word;
-    }
-    else return word.substr(0, pos);
-}
-
-void find_in_document(std::string line, const std::vector<Word>& ngrams, const std::unordered_map<std::string, std::vector<int>>& prefixMap)
-{
-    std::string prefix;
-    size_t start = 0;
-
     std::vector<Match> matches;
 
-    line += ' ';
+    Word lineWord = dict.createWord(line);
 
-    for (size_t i = 0; i < line.size(); i++)
+    for (size_t i = 0; i < lineWord.hashList.size(); i++)
     {
-        char c = line.at(i);
-        if (c == ' ')
+        DictHash prefix = lineWord.hashList.at(i);
+        if (prefixMap.count(prefix))
         {
-            if (prefixMap.count(prefix))
+            for (int index : prefixMap.at(prefix))
             {
-                for (int i : prefixMap.at(prefix))
+                const Word& ngram = ngrams.at(index);
+
+                if (!ngram.active) continue;
+
+                size_t ngramSize = ngram.hashList.size();
+                size_t lineSize = lineWord.hashList.size();
+                size_t matchedLength = 0;
+                for (; matchedLength < ngramSize && i + matchedLength < lineSize; matchedLength++)
                 {
-                    const Word& ngram = ngrams.at(i);
-
-                    if (!ngram.active) continue;
-
-                    size_t length = ngram.word.size();
-                    size_t j = 0;
-                    for (; j < length && start + j < line.size(); j++)
+                    if (ngram.hashList.at(matchedLength) != lineWord.hashList.at(i + matchedLength))
                     {
-                        if (ngram.word.at(j) != line.at(start + j))
-                        {
-                            break;
-                        }
-                    }
-
-                    if (j == length && (start + ngram.word.size() == line.size() || line[start + ngram.word.size()] == ' '))
-                    {
-                        matches.emplace_back(start, ngram.word);
+                        break;
                     }
                 }
-            }
 
-            start = i + 1;
-            prefix = "";
-        }
-        else
-        {
-            prefix += c;
+                if (matchedLength == ngramSize)
+                {
+                    matches.emplace_back(i, dict.createString(ngram));
+                }
+            }
         }
     }
 
@@ -144,11 +123,10 @@ int main()
 #endif
 
     std::vector<Word> ngrams = load_init_data(input);
-    std::unordered_map<std::string, std::vector<int>> prefixMap;
 
     for (size_t i = 0; i < ngrams.size(); i++)
     {
-        std::string prefix = find_prefix(ngrams.at(i).word);
+        DictHash prefix = ngrams.at(i).hashList.at(0);
         if (!prefixMap.count(prefix))
         {
             prefixMap[prefix] = std::vector<int>();
@@ -173,13 +151,14 @@ int main()
         {
             line = line.substr(2);
 
-            ngrams.emplace_back(line);
-            std::string prefix = find_prefix(line);
+            ngrams.emplace_back(dict.createWord(line));
+            size_t index = ngrams.size() - 1;
+            DictHash prefix = ngrams.at(index).hashList.at(0);
             if (!prefixMap.count(prefix))
             {
                 prefixMap[prefix] = std::vector<int>();
             }
-            prefixMap.at(prefix).emplace_back(ngrams.size() - 1);
+            prefixMap.at(prefix).emplace_back(index);
 
 #ifdef PRINT_STATISTICS
         additions++;
@@ -190,14 +169,15 @@ int main()
         {
             line = line.substr(2);
 
-            std::string prefix = find_prefix(line);
+            Word word = dict.createWord(line);
+            DictHash prefix = word.hashList.at(0);
 
             if (prefixMap.count(prefix))
             {
                 for (int i : prefixMap.at(prefix))
                 {
                     Word& ngram = ngrams.at(i);
-                    if (ngram.active && ngram.word == line)
+                    if (ngram.active && ngram == word)
                     {
                         ngram.active = false;
                     }
@@ -212,7 +192,7 @@ int main()
         {
             line = line.substr(2);
 
-            find_in_document(line, ngrams, prefixMap);
+            find_in_document(line, ngrams);
 
             std::cout << std::endl;
 

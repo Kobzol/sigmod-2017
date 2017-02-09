@@ -11,5 +11,5 @@ ENDIF(REAL_RUN)
 
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -march=native -std=c++14 -Wall")
 
-set(SOURCE_FILES src/main.cpp src/word.cpp)
+set(SOURCE_FILES src/main.cpp src/word.cpp src/dictionary.cpp src/dictionary.h src/util.h)
 add_executable(sigmod_2017 ${SOURCE_FILES})
