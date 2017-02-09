@@ -69,7 +69,8 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
 
                     size_t length = ngram.word.size();
                     size_t j = 0;
-                    for (; j < length && start + j < line.size(); j++)
+                    size_t lineSize = line.size();
+                    for (; j < length && start + j < lineSize; j++)
                     {
                         if (ngram.word.at(j) != line.at(start + j))
                         {
@@ -223,7 +224,7 @@ int main()
         }
         else
         {
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);
