@@ -121,8 +121,8 @@ int main()
 #endif
 
 #ifdef PRINT_STATISTICS
-    int additions = 0, deletions = 0, queries = 0, init_ngrams = 0;
-    size_t query_length = 0, ngram_length = 0;
+    int additions = 0, deletions = 0, query_count = 0, init_ngrams = 0;
+    size_t query_length = 0, ngram_length = 0, document_word_count = 0;
 #endif
 
     std::vector<Word> ngrams = load_init_data(input);
@@ -138,7 +138,7 @@ int main()
 
 #ifdef PRINT_STATISTICS
         init_ngrams++;
-        ngram_length += ngrams.at(i).word.size();
+        ngram_length += dict.createString(ngrams.at(i)).size();
 #endif
     }
 
@@ -202,8 +202,17 @@ int main()
             queries.emplace_back(line, timestamp);
 
 #ifdef PRINT_STATISTICS
-            queries++;
+            query_count++;
             query_length += line.size();
+
+            document_word_count++;
+            for (size_t i = 0; i < line.size(); i++)
+            {
+                if (line.at(i) == ' ')
+                {
+                    document_word_count++;
+                }
+            }
 #endif
         }
         else
@@ -232,8 +241,9 @@ int main()
     std::cerr << "Initial ngrams: " << init_ngrams << std::endl;
     std::cerr << "Additions: " << additions << std::endl;
     std::cerr << "Deletions: " << deletions << std::endl;
-    std::cerr << "Queries: " << queries << std::endl;
-    std::cerr << "Average query length: " << query_length / queries << std::endl;
+    std::cerr << "Queries: " << query_count << std::endl;
+    std::cerr << "Average document length: " << query_length / query_count << std::endl;
+    std::cerr << "Average document word count: " << document_word_count / query_count << std::endl;
     std::cerr << "Average ngram length: " << ngram_length / ngrams.size() << std::endl;
 #endif
 
