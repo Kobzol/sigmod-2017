@@ -4,12 +4,14 @@
 #include <regex>
 #include <unordered_map>
 #include <unordered_set>
+#include <omp.h>
 
 #include "settings.h"
 #include "word.h"
 #include "dictionary.h"
+#include "query.h"
 
-static int query_id = 0;
+
 static Dictionary dict;
 static std::unordered_map<DictHash, std::vector<int>> prefixMap;
 
@@ -28,18 +30,20 @@ std::vector<Word> load_init_data(std::istream& input)
         }
         else
         {
-            ngrams.emplace_back(dict.createWord(line));
+            ngrams.emplace_back(dict.createWord(line), 0);
         }
     }
 
     return ngrams;
 }
 
-void find_in_document(std::string line, const std::vector<Word>& ngrams)
+void find_in_document(Query& query, const std::vector<Word>& ngrams)
 {
     std::vector<Match> matches;
+    size_t timestamp = query.timestamp;
+    std::string& line = query.document;
 
-    Word lineWord = dict.createWord(line);
+    Word lineWord(dict.createWord(line), 0);
 
     for (size_t i = 0; i < lineWord.hashList.size(); i++)
     {
@@ -50,7 +54,7 @@ void find_in_document(std::string line, const std::vector<Word>& ngrams)
             {
                 const Word& ngram = ngrams.at(index);
 
-                if (!ngram.active) continue;
+                if (!ngram.is_active(timestamp)) continue;
 
                 size_t ngramSize = ngram.hashList.size();
                 size_t lineSize = lineWord.hashList.size();
@@ -81,12 +85,12 @@ void find_in_document(std::string line, const std::vector<Word>& ngrams)
     std::unordered_set<std::string> found;
     if (matches.size() == 0)
     {
-        std::cout << "-1";
+        query.result += "-1";
     }
     else
     {
         found.insert(matches.at(0).word);
-        std::cout << matches.at(0).word;
+        query.result += matches.at(0).word;
     }
 
     for (size_t i = 1; i < matches.size(); i++)
@@ -94,12 +98,11 @@ void find_in_document(std::string line, const std::vector<Word>& ngrams)
         Match& match = matches.at(i);
         if (!found.count(match.word))
         {
-            std::cout << "|" << match.word;
+            query.result += '|';
+            query.result += match.word;
             found.insert(match.word);
         }
     }
-
-    query_id++;
 }
 
 int main()
@@ -141,17 +144,21 @@ int main()
 
     std::cout << "R" << std::endl;
 
+    std::vector<Query> queries;
+    size_t timestamp = 0;
+
     while (true)
     {
         std::string line;
         if (!std::getline(input, line) || line.size() == 0) break;
         char op = line[0];
+        timestamp++;
 
         if (op == 'A')
         {
             line = line.substr(2);
 
-            ngrams.emplace_back(dict.createWord(line));
+            ngrams.emplace_back(dict.createWord(line), timestamp);
             size_t index = ngrams.size() - 1;
             DictHash prefix = ngrams.at(index).hashList.at(0);
             if (!prefixMap.count(prefix))
@@ -169,7 +176,7 @@ int main()
         {
             line = line.substr(2);
 
-            Word word = dict.createWord(line);
+            Word word(dict.createWord(line), 0);
             DictHash prefix = word.hashList.at(0);
 
             if (prefixMap.count(prefix))
@@ -177,9 +184,9 @@ int main()
                 for (int i : prefixMap.at(prefix))
                 {
                     Word& ngram = ngrams.at(i);
-                    if (ngram.active && ngram == word)
+                    if (ngram.is_active(timestamp) && ngram == word)
                     {
-                        ngram.active = false;
+                        ngram.deactivate(timestamp);
                     }
                 }
             }
@@ -192,16 +199,33 @@ int main()
         {
             line = line.substr(2);
 
-            find_in_document(line, ngrams);
-
-            std::cout << std::endl;
+            queries.emplace_back(line, timestamp);
 
 #ifdef PRINT_STATISTICS
             queries++;
             query_length += line.size();
 #endif
         }
-        else std::cout << std::flush;
+        else
+        {
+            // do queries in parallel
+            //#pragma omp parallel for
+            for (size_t i = 0; i < queries.size(); i++)
+            {
+                Query& query = queries.at(i);
+                find_in_document(query, ngrams);
+            }
+
+            // print results
+            for (Query& query : queries)
+            {
+                std::cout << query.result << std::endl;
+            }
+
+            queries.clear();
+
+            std::cout << std::flush;
+        }
     }
 
 #ifdef PRINT_STATISTICS

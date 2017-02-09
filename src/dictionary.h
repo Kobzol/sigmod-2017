@@ -6,6 +6,8 @@
 #include <iostream>
 #include "word.h"
 #include "settings.h"
+#include <mutex>
+
 
 class Dictionary
 {
@@ -48,7 +50,7 @@ public:
         return this->get_hash(word);
     }
 
-    Word createWord(const std::string& word)
+    std::vector<DictHash> createWord(const std::string& word)
     {
         std::vector<DictHash> hashList;
         std::string prefix;
@@ -69,7 +71,7 @@ public:
 
         hashList.push_back(this->insert(prefix));
 
-        return Word(hashList);
+        return hashList;
     }
 
     std::string createString(const Word& word)
@@ -93,4 +95,5 @@ public:
 private:
     std::unordered_map<std::string, DictHash> dictionary;
     std::unordered_map<DictHash, std::string> backMapping;
+    std::mutex mutex;
 };
