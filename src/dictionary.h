@@ -6,7 +6,6 @@
 #include <iostream>
 #include "word.h"
 #include "settings.h"
-#include <mutex>
 
 
 class Dictionary
@@ -73,6 +72,29 @@ public:
 
         return hashList;
     }
+    std::vector<DictHash> createWordNoInsert(const std::string& word)
+    {
+        std::vector<DictHash> hashList;
+        std::string prefix;
+
+        for (size_t i = 0; i < word.size(); i++)
+        {
+            char c = word.at(i);
+            if (c == ' ')
+            {
+                hashList.push_back(this->get_hash_maybe(prefix));
+                prefix = "";
+            }
+            else
+            {
+                prefix += c;
+            }
+        }
+
+        hashList.push_back(this->get_hash_maybe(prefix));
+
+        return hashList;
+    }
 
     std::string createString(const Word& word)
     {
@@ -95,5 +117,4 @@ public:
 private:
     std::unordered_map<std::string, DictHash> dictionary;
     std::unordered_map<DictHash, std::string> backMapping;
-    std::mutex mutex;
 };

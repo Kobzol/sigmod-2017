@@ -43,12 +43,12 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     size_t timestamp = query.timestamp;
     std::string& line = query.document;
 
-    Word lineWord(dict.createWord(line), 0);
+    Word lineWord(dict.createWordNoInsert(line), 0);
 
     for (size_t i = 0; i < lineWord.hashList.size(); i++)
     {
         DictHash prefix = lineWord.hashList.at(i);
-        if (prefixMap.count(prefix))
+        if (prefix != HASH_NOT_FOUND && prefixMap.count(prefix))
         {
             for (int index : prefixMap.at(prefix))
             {
@@ -61,7 +61,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
                 size_t matchedLength = 0;
                 for (; matchedLength < ngramSize && i + matchedLength < lineSize; matchedLength++)
                 {
-                    if (ngram.hashList.at(matchedLength) != lineWord.hashList.at(i + matchedLength))
+                    if (lineWord.hashList.at(i) == HASH_NOT_FOUND || ngram.hashList.at(matchedLength) != lineWord.hashList.at(i + matchedLength))
                     {
                         break;
                     }
@@ -209,7 +209,7 @@ int main()
         else
         {
             // do queries in parallel
-            //#pragma omp parallel for
+            #pragma omp parallel for
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);
