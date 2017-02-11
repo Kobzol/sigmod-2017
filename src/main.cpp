@@ -235,12 +235,8 @@ int main()
     std::cerr << "Average ngram length: " << ngram_length / ngrams.size() << std::endl;
 
     std::cerr << "State count: " << nfa.states.size() << std::endl;
-    size_t stateSum = 0;
-    for (auto& state : nfa.states)
-    {
-        stateSum += state.arcs.size();
-    }
-    std::cerr << "Average state size: " << (double) stateSum / nfa.states.size() << std::endl;
+    size_t stateSum = ((HashNfaState<std::string>*)nfa.states.at(0))->arcs.size();
+    std::cerr << "Hash state size: " << (double) stateSum  << std::endl;
 
 #endif
 

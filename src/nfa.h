@@ -44,7 +44,7 @@ public:
         this->arcs[input] = index;
     }
 
-private:
+//private:
     std::unordered_map<MapType, size_t> arcs;
 };
 
@@ -152,7 +152,7 @@ public:
         visitor.stateIndex = nextStateIndex;
     }
 
-private:
+//private:
     std::vector<NfaState<MapType>*> states;
 
     size_t createState()
