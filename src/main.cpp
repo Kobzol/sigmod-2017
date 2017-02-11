@@ -10,10 +10,12 @@
 #include "word.h"
 #include "dictionary.h"
 #include "query.h"
+#include "nfa.h"
 
 
 static Dictionary dict;
 static std::unordered_map<DictHash, std::vector<int>> prefixMap;
+static Nfa<size_t> nfa;
 
 std::vector<Word> load_init_data(std::istream& input)
 {
@@ -43,11 +45,25 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     size_t timestamp = query.timestamp;
     std::string& line = query.document;
 
+    NfaVisitor visitor;
+
     Word lineWord(dict.createWordNoInsert(line), 0);
 
     for (size_t i = 0; i < lineWord.hashList.size(); i++)
     {
-        DictHash prefix = lineWord.hashList.at(i);
+        std::vector<ssize_t> indices;
+        nfa.feedWord(visitor, lineWord.hashList.at(i), indices);
+
+        for (ssize_t index : indices)
+        {
+            const Word& word = ngrams.at(index);
+            if (word.is_active(timestamp))
+            {
+                matches.emplace_back(i - word.hashList.size(), dict.createString(word));  // TODO: subtract string length
+            }
+        }
+
+        /*DictHash prefix = lineWord.hashList.at(i);
         if (prefix != HASH_NOT_FOUND && prefixMap.count(prefix))
         {
             for (int index : prefixMap.at(prefix))
@@ -72,7 +88,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
                     matches.emplace_back(i, dict.createString(ngram));
                 }
             }
-        }
+        }*/
     }
 
     std::sort(matches.begin(), matches.end(), [](Match& m1, Match& m2)
@@ -137,16 +153,19 @@ int main()
         }
         prefixMap.at(prefix).emplace_back(i);
 
+        nfa.addWord(ngrams.at(i), i);
+
 #ifdef PRINT_STATISTICS
         init_ngrams++;
         ngram_length += dict.createString(ngrams.at(i)).size();
 #endif
     }
 
-    std::cout << "R" << std::endl;
-
     std::vector<Query> queries;
+    queries.reserve(10000);
     size_t timestamp = 0;
+
+    std::cout << "R" << std::endl;
 
     while (true)
     {
@@ -167,6 +186,8 @@ int main()
                 prefixMap[prefix] = std::vector<int>();
             }
             prefixMap.at(prefix).emplace_back(index);
+
+            nfa.addWord(ngrams.at(ngrams.size() - 1), ngrams.size() - 1);
 
 #ifdef PRINT_STATISTICS
         additions++;
