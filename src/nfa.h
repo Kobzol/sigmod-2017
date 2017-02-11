@@ -12,7 +12,7 @@ class NfaVisitor
 {
 public:
     std::unordered_set<size_t> states[2];
-    size_t currentState = 0;
+    size_t stateIndex = 0;
 };
 
 template <typename MapType>
@@ -27,6 +27,11 @@ template <typename MapType>
 class Nfa
 {
 public:
+    Nfa()
+    {
+        this->states.emplace_back();    // add root state
+    }
+
     void addWord(Word& word, size_t wordIndex)
     {
         size_t activeState = 0;
@@ -53,7 +58,7 @@ public:
     {
         std::vector<ssize_t> results;
 
-        size_t currentStateIndex = visitor.currentState;
+        size_t currentStateIndex = visitor.stateIndex;
         size_t nextStateIndex = 1 - currentStateIndex;
 
         visitor.states[nextStateIndex].clear();
@@ -65,7 +70,7 @@ public:
             if (state.arcs.count(input))
             {
                 size_t nextStateId = state.arcs.at(input);
-                visitor.states[nextStateId].insert(nextStateId);
+                visitor.states[nextStateIndex].insert(nextStateId);
 
                 NfaState<MapType>& nextState = this->states.at(nextStateId);
                 if (nextState.wordIndex != NOT_FINAL_STATE)
@@ -74,6 +79,8 @@ public:
                 }
             }
         }
+
+        visitor.stateIndex = nextStateIndex;
 
         return results;
     }

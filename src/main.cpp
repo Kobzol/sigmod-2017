@@ -39,7 +39,6 @@ std::vector<Word> load_init_data(std::istream& input)
 void find_in_document(Query& query, const std::vector<Word>& ngrams)
 {
     std::string prefix;
-    size_t start = 0;
     std::vector<Match> matches;
 
     size_t timestamp = query.timestamp;
@@ -58,11 +57,11 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
             {
                 if (ngrams.at(index).is_active(timestamp))
                 {
-                    matches.emplace_back(start, ngrams.at(index).word);
+                    const std::string& word = ngrams.at(index).word;
+                    matches.emplace_back(i - word.size(), word);
                 }
             }
 
-            start = i + 1;
             prefix = "";
         }
         else
@@ -206,7 +205,7 @@ int main()
         }
         else
         {
-#pragma omp parallel for schedule(dynamic)
+            //#pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);
