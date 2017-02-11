@@ -123,6 +123,7 @@ int main()
 #ifdef PRINT_STATISTICS
     int additions = 0, deletions = 0, query_count = 0, init_ngrams = 0;
     size_t query_length = 0, ngram_length = 0, document_word_count = 0;
+    size_t batch_count = 0, batch_size = 0;
 #endif
 
     std::vector<Word> ngrams = load_init_data(input);
@@ -217,8 +218,13 @@ int main()
         }
         else
         {
+#ifdef PRINT_STATISTICS
+            batch_count++;
+            batch_size += queries.size();
+#endif
+
             // do queries in parallel
-            #pragma omp parallel for
+            #pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);
@@ -245,6 +251,9 @@ int main()
     std::cerr << "Average document length: " << query_length / query_count << std::endl;
     std::cerr << "Average document word count: " << document_word_count / query_count << std::endl;
     std::cerr << "Average ngram length: " << ngram_length / ngrams.size() << std::endl;
+    std::cerr << "Batch count: " << batch_count << std::endl;
+    std::cerr << "Average batch size: " << batch_size / batch_count << std::endl;
+
 #endif
 
     return 0;
