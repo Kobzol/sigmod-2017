@@ -7,9 +7,8 @@
 class Word
 {
 public:
-    Word(std::vector<DictHash> hashList, size_t from): hashList(hashList),
-                                                       from(from),
-                                                       to(UINT32_MAX)
+    Word(size_t from): from(from),
+                       to(UINT32_MAX)
     {
 
     }

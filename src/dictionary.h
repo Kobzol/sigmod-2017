@@ -49,9 +49,8 @@ public:
         return this->get_hash(word);
     }
 
-    std::vector<DictHash> createWord(const std::string& word)
+    void createWord(const std::string& word, std::vector<DictHash>& hashList)
     {
-        std::vector<DictHash> hashList;
         std::string prefix;
 
         for (size_t i = 0; i < word.size(); i++)
@@ -69,12 +68,9 @@ public:
         }
 
         hashList.push_back(this->insert(prefix));
-
-        return hashList;
     }
-    std::vector<DictHash> createWordNoInsert(const std::string& word)
+    void createWordNoInsert(const std::string& word, std::vector<DictHash>& hashList)
     {
-        std::vector<DictHash> hashList;
         std::string prefix;
 
         for (size_t i = 0; i < word.size(); i++)
@@ -92,8 +88,6 @@ public:
         }
 
         hashList.push_back(this->get_hash_maybe(prefix));
-
-        return hashList;
     }
 
     std::string createString(const Word& word)

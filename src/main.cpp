@@ -4,7 +4,6 @@
 #include <regex>
 #include <unordered_map>
 #include <unordered_set>
-#include <omp.h>
 
 #include "settings.h"
 #include "word.h"
@@ -32,7 +31,8 @@ std::vector<Word> load_init_data(std::istream& input)
         }
         else
         {
-            ngrams.emplace_back(dict.createWord(line), 0);
+            ngrams.emplace_back(0);
+            dict.createWord(line, ngrams.at(ngrams.size() - 1).hashList);
         }
     }
 
@@ -44,12 +44,44 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     std::vector<Match> matches;
     size_t timestamp = query.timestamp;
     std::string& line = query.document;
+    line += ' ';
 
     NfaVisitor visitor;
 
-    Word lineWord(dict.createWordNoInsert(line), 0);
+    std::string prefix;
+    for (size_t i = 0; i < line.size(); i++)
+    {
+        char c = line.at(i);
+        if (c == ' ')
+        {
+            DictHash hash = dict.get_hash_maybe(prefix);
+            if (hash != HASH_NOT_FOUND)
+            {
+                std::vector<ssize_t> indices;
+                nfa.feedWord(visitor, hash, indices);
 
-    for (size_t i = 0; i < lineWord.hashList.size(); i++)
+                for (ssize_t index : indices)
+                {
+                    const Word& word = ngrams.at(index);
+                    if (word.is_active(timestamp))
+                    {
+                        std::string w = dict.createString(word);
+
+                        matches.emplace_back(i - w.size(), w);  // TODO: subtract string length
+                    }
+                }
+            }
+            else visitor.states[visitor.stateIndex].clear();
+
+            prefix.clear();
+        }
+        else
+        {
+            prefix += c;
+        }
+    }
+
+    /*for (size_t i = 0; i < lineWord.hashList.size(); i++)
     {
         std::vector<ssize_t> indices;
         nfa.feedWord(visitor, lineWord.hashList.at(i), indices);
@@ -62,34 +94,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
                 matches.emplace_back(i - word.hashList.size(), dict.createString(word));  // TODO: subtract string length
             }
         }
-
-        /*DictHash prefix = lineWord.hashList.at(i);
-        if (prefix != HASH_NOT_FOUND && prefixMap.count(prefix))
-        {
-            for (int index : prefixMap.at(prefix))
-            {
-                const Word& ngram = ngrams.at(index);
-
-                if (!ngram.is_active(timestamp)) continue;
-
-                size_t ngramSize = ngram.hashList.size();
-                size_t lineSize = lineWord.hashList.size();
-                size_t matchedLength = 0;
-                for (; matchedLength < ngramSize && i + matchedLength < lineSize; matchedLength++)
-                {
-                    if (lineWord.hashList.at(i) == HASH_NOT_FOUND || ngram.hashList.at(matchedLength) != lineWord.hashList.at(i + matchedLength))
-                    {
-                        break;
-                    }
-                }
-
-                if (matchedLength == ngramSize)
-                {
-                    matches.emplace_back(i, dict.createString(ngram));
-                }
-            }
-        }*/
-    }
+    }*/
 
     std::sort(matches.begin(), matches.end(), [](Match& m1, Match& m2)
     {
@@ -178,7 +183,8 @@ int main()
         {
             line = line.substr(2);
 
-            ngrams.emplace_back(dict.createWord(line), timestamp);
+            ngrams.emplace_back(timestamp);
+            dict.createWord(line, ngrams.at(ngrams.size() - 1).hashList);
             size_t index = ngrams.size() - 1;
             DictHash prefix = ngrams.at(index).hashList.at(0);
             if (!prefixMap.count(prefix))
@@ -198,7 +204,8 @@ int main()
         {
             line = line.substr(2);
 
-            Word word(dict.createWord(line), 0);
+            Word word(0);
+            dict.createWord(line, word.hashList);
             DictHash prefix = word.hashList.at(0);
 
             if (prefixMap.count(prefix))
@@ -245,7 +252,7 @@ int main()
 #endif
 
             // do queries in parallel
-            #pragma omp parallel for schedule(dynamic)
+            //#pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);
