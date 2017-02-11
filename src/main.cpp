@@ -15,7 +15,7 @@
 
 static Dictionary dict;
 static std::unordered_map<DictHash, std::vector<int>> prefixMap;
-static Nfa<size_t> nfa;
+static Nfa<ssize_t> nfa;
 
 std::vector<Word> load_init_data(std::istream& input)
 {
@@ -52,43 +52,21 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     for (size_t i = 0; i < lineWord.hashList.size(); i++)
     {
         std::vector<ssize_t> indices;
-        nfa.feedWord(visitor, lineWord.hashList.at(i), indices);
-
-        for (ssize_t index : indices)
+        DictHash hash = lineWord.hashList.at(i);
+        if (hash != HASH_NOT_FOUND)
         {
-            const Word& word = ngrams.at(index);
-            if (word.is_active(timestamp))
+            nfa.feedWord(visitor, lineWord.hashList.at(i), indices);
+
+            for (ssize_t index : indices)
             {
-                matches.emplace_back(i - word.hashList.size(), dict.createString(word));  // TODO: subtract string length
+                const Word& word = ngrams.at(index);
+                if (word.is_active(timestamp))
+                {
+                    matches.emplace_back(i - word.hashList.size(), dict.createString(word));  // TODO: subtract string length
+                }
             }
         }
-
-        /*DictHash prefix = lineWord.hashList.at(i);
-        if (prefix != HASH_NOT_FOUND && prefixMap.count(prefix))
-        {
-            for (int index : prefixMap.at(prefix))
-            {
-                const Word& ngram = ngrams.at(index);
-
-                if (!ngram.is_active(timestamp)) continue;
-
-                size_t ngramSize = ngram.hashList.size();
-                size_t lineSize = lineWord.hashList.size();
-                size_t matchedLength = 0;
-                for (; matchedLength < ngramSize && i + matchedLength < lineSize; matchedLength++)
-                {
-                    if (lineWord.hashList.at(i) == HASH_NOT_FOUND || ngram.hashList.at(matchedLength) != lineWord.hashList.at(i + matchedLength))
-                    {
-                        break;
-                    }
-                }
-
-                if (matchedLength == ngramSize)
-                {
-                    matches.emplace_back(i, dict.createString(ngram));
-                }
-            }
-        }*/
+        else visitor.states[visitor.stateIndex].clear();
     }
 
     std::sort(matches.begin(), matches.end(), [](Match& m1, Match& m2)
@@ -141,6 +119,8 @@ int main()
     size_t query_length = 0, ngram_length = 0, document_word_count = 0;
     size_t batch_count = 0, batch_size = 0;
 #endif
+
+    initLinearMap();
 
     std::vector<Word> ngrams = load_init_data(input);
 
@@ -245,7 +225,7 @@ int main()
 #endif
 
             // do queries in parallel
-            #pragma omp parallel for schedule(dynamic)
+            #pragma omp parallel for
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);

@@ -3,11 +3,19 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
+#include <iostream>
 #include "word.h"
 #include "util.h"
 
 #define NOT_FINAL_STATE ((ssize_t) -1)
 #define NO_ARC ((ssize_t) -1)
+
+#define LINEAR_MAP_SIZE (1024000)
+
+extern ssize_t* linearMap;
+
+void initLinearMap();
+
 
 class NfaVisitor
 {
@@ -31,17 +39,19 @@ class HashNfaState : public NfaState<MapType>
 public:
     ssize_t get_arc(const MapType& input) override
     {
-        if (this->arcs.count(input))
+        return linearMap[input];
+        /*if (this->arcs.count(input))
         {
             return this->arcs.at(input);
         }
 
-        return NO_ARC;
+        return NO_ARC;*/
     }
 
     void add_arc(const MapType& input, size_t index) override
     {
-        this->arcs[input] = index;
+        //this->arcs[input] = index;
+        linearMap[input] = index;
     }
 
 private:
