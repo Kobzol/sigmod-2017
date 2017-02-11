@@ -52,7 +52,8 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
         char c = line.at(i);
         if (c == ' ')
         {
-            std::vector<ssize_t> indices = nfa.feedWord(visitor, prefix);
+            std::vector<ssize_t> indices;
+            nfa.feedWord(visitor, prefix, indices);
             for (ssize_t index : indices)
             {
                 if (ngrams.at(index).is_active(timestamp))
@@ -116,7 +117,7 @@ int main()
 #endif
 
 #ifdef PRINT_STATISTICS
-    int additions = 0, deletions = 0, queries = 0, init_ngrams = 0;
+    int additions = 0, deletions = 0, query_count = 0, init_ngrams = 0;
     size_t query_length = 0, ngram_length = 0;
 #endif
 
@@ -139,9 +140,11 @@ int main()
 #endif
     }
 
-    std::cout << "R" << std::endl;
     size_t timestamp = 0;
     std::vector<Query> queries;
+    queries.reserve(10000);
+
+    std::cout << "R" << std::endl;
 
     while (true)
     {
@@ -199,7 +202,7 @@ int main()
             queries.emplace_back(line, timestamp);
 
 #ifdef PRINT_STATISTICS
-            queries++;
+            query_count++;
             query_length += line.size();
 #endif
         }
@@ -227,9 +230,18 @@ int main()
     std::cerr << "Initial ngrams: " << init_ngrams << std::endl;
     std::cerr << "Additions: " << additions << std::endl;
     std::cerr << "Deletions: " << deletions << std::endl;
-    std::cerr << "Queries: " << queries << std::endl;
-    std::cerr << "Average query length: " << query_length / queries << std::endl;
+    std::cerr << "Queries: " << query_count << std::endl;
+    std::cerr << "Average query length: " << query_length / query_count << std::endl;
     std::cerr << "Average ngram length: " << ngram_length / ngrams.size() << std::endl;
+
+    std::cerr << "State count: " << nfa.states.size() << std::endl;
+    size_t stateSum = 0;
+    for (auto& state : nfa.states)
+    {
+        stateSum += state.arcs.size();
+    }
+    std::cerr << "Average state size: " << (double) stateSum / nfa.states.size() << std::endl;
+
 #endif
 
     return 0;
