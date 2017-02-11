@@ -8,8 +8,11 @@
 #include "settings.h"
 #include "word.h"
 #include "query.h"
+#include "util.h"
+#include "nfa.h"
 
 static std::unordered_map<std::string, std::vector<int>> prefixMap;
+static Nfa<std::string> nfa;
 
 std::vector<Word> load_init_data(std::istream& input)
 {
@@ -33,17 +36,6 @@ std::vector<Word> load_init_data(std::istream& input)
     return ngrams;
 }
 
-std::string find_prefix(std::string word)
-{
-    auto pos = word.find(' ');
-
-    if (pos == std::string::npos)
-    {
-        return word;
-    }
-    else return word.substr(0, pos);
-}
-
 void find_in_document(Query& query, const std::vector<Word>& ngrams)
 {
     std::string prefix;
@@ -54,34 +46,19 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     std::string& line = query.document;
     line += ' ';
 
+    NfaVisitor visitor;
+
     for (size_t i = 0; i < line.size(); i++)
     {
         char c = line.at(i);
         if (c == ' ')
         {
-            if (prefixMap.count(prefix))
+            std::vector<ssize_t> indices = nfa.feedWord(visitor, prefix);
+            for (ssize_t index : indices)
             {
-                for (int i : prefixMap.at(prefix))
+                if (ngrams.at(index).is_active(timestamp))
                 {
-                    const Word& ngram = ngrams.at(i);
-
-                    if (!ngram.is_active(timestamp)) continue;
-
-                    size_t length = ngram.word.size();
-                    size_t j = 0;
-                    size_t lineSize = line.size();
-                    for (; j < length && start + j < lineSize; j++)
-                    {
-                        if (ngram.word.at(j) != line.at(start + j))
-                        {
-                            break;
-                        }
-                    }
-
-                    if (j == length && (start + ngram.word.size() == line.size() || line[start + ngram.word.size()] == ' '))
-                    {
-                        matches.emplace_back(start, ngram.word);
-                    }
+                    matches.emplace_back(start, ngrams.at(index).word);
                 }
             }
 
@@ -155,6 +132,8 @@ int main()
         }
         prefixMap.at(prefix).emplace_back(i);
 
+        nfa.addWord(ngrams.at(i), i);
+
 #ifdef PRINT_STATISTICS
         init_ngrams++;
         ngram_length += ngrams.at(i).word.size();
@@ -184,6 +163,8 @@ int main()
             }
             prefixMap.at(prefix).emplace_back(ngrams.size() - 1);
 
+            nfa.addWord(ngrams.at(ngrams.size() - 1), ngrams.size() - 1);
+
 #ifdef PRINT_STATISTICS
         additions++;
         ngram_length += line.size();
@@ -193,6 +174,7 @@ int main()
         {
             line = line.substr(2);
 
+            // TODO: try linear search
             std::string prefix = find_prefix(line);
 
             if (prefixMap.count(prefix))

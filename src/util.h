@@ -1,8 +1,6 @@
-//
-// Created by kobzol on 2/11/17.
-//
+#pragma once
 
-#ifndef SIGMOD_2017_UTIL_H
-#define SIGMOD_2017_UTIL_H
+#include <string>
 
-#endif //SIGMOD_2017_UTIL_H
+std::string find_prefix(const std::string& word);
+std::string find_prefix_from(const std::string& word, size_t from = 0);
