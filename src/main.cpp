@@ -59,9 +59,10 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
         char c = line.at(i);
         if (c == ' ')
         {
-            if (prefixMap.count(prefix))
+            auto it = prefixMap.find(prefix);
+            if (it != prefixMap.end())
             {
-                for (int i : prefixMap.at(prefix))
+                for (int i : it->second)
                 {
                     const Word& ngram = ngrams.at(i);
 
@@ -115,7 +116,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     for (size_t i = 1; i < matches.size(); i++)
     {
         Match& match = matches.at(i);
-        if (!found.count(match.word))
+        if (found.find(match.word) == found.end())
         {
             query.result += '|';
             query.result += match.word;
@@ -126,6 +127,8 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
 
 int main()
 {
+    std::ios::sync_with_stdio(false);
+
 #ifdef LOAD_FROM_FILE
     std::fstream file(LOAD_FROM_FILE, std::iostream::in);
 
@@ -224,7 +227,7 @@ int main()
         }
         else
         {
-#pragma omp parallel for schedule(dynamic)
+            #pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);
