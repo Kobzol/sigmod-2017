@@ -11,6 +11,7 @@
 #include "dictionary.h"
 #include "query.h"
 #include "nfa.h"
+#include "timer.h"
 
 
 static Dictionary dict;
@@ -101,6 +102,8 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
 
 int main()
 {
+    std::ios::sync_with_stdio(false);
+
 #ifdef LOAD_FROM_FILE
     std::fstream file(LOAD_FROM_FILE, std::iostream::in);
 
@@ -118,6 +121,7 @@ int main()
     int additions = 0, deletions = 0, query_count = 0, init_ngrams = 0;
     size_t query_length = 0, ngram_length = 0, document_word_count = 0;
     size_t batch_count = 0, batch_size = 0;
+    Timer ioTimer, addTimer, deleteTimer, queryTimer;
 #endif
 
     initLinearMap();
@@ -153,11 +157,22 @@ int main()
         queries.emplace_back(timestamp);
 
         std::string& line = queries.at(queries.size() - 1).document;
+
+#ifdef PRINT_STATISTICS
+        ioTimer.start();
+#endif
         if (!std::getline(input, line) || line.size() == 0) break;
+#ifdef PRINT_STATISTICS
+        ioTimer.add();
+#endif
+
         char op = line[0];
 
         if (op == 'A')
         {
+#ifdef PRINT_STATISTICS
+            addTimer.start();
+#endif
             ngrams.emplace_back(dict.createWord(line, 2), timestamp);
             size_t index = ngrams.size() - 1;
             DictHash prefix = ngrams.at(index).hashList.at(0);
@@ -166,14 +181,17 @@ int main()
             nfa.addWord(ngrams.at(index), index);
 
             queries.resize(queries.size() - 1);
-
 #ifdef PRINT_STATISTICS
+            addTimer.add();
             additions++;
-        ngram_length += line.size();
+            ngram_length += line.size();
 #endif
         }
         else if (op == 'D')
         {
+#ifdef PRINT_STATISTICS
+            deleteTimer.start();
+#endif
             Word word(dict.createWord(line, 2), 0);
             DictHash prefix = word.hashList.at(0);
 
@@ -193,6 +211,7 @@ int main()
             queries.resize(queries.size() - 1);
 
 #ifdef PRINT_STATISTICS
+            deleteTimer.add();
             deletions++;
 #endif
         }
@@ -217,6 +236,7 @@ int main()
 #ifdef PRINT_STATISTICS
             batch_count++;
             batch_size += queries.size();
+            queryTimer.start();
 #endif
             queries.resize(queries.size() - 1);
 
@@ -237,6 +257,10 @@ int main()
             queries.clear();
 
             std::cout << std::flush;
+
+#ifdef PRINT_STATISTICS
+            queryTimer.add();
+#endif
         }
     }
 
@@ -250,6 +274,11 @@ int main()
     std::cerr << "Average ngram length: " << ngram_length / ngrams.size() << std::endl;
     std::cerr << "Batch count: " << batch_count << std::endl;
     std::cerr << "Average batch size: " << batch_size / batch_count << std::endl;
+
+    std::cerr << "IO time: " << ioTimer.total << std::endl;
+    std::cerr << "Add time: " << addTimer.total << std::endl;
+    std::cerr << "Delete time: " << deleteTimer.total << std::endl;
+    std::cerr << "Query time: " << queryTimer.total << std::endl;
 
 #endif
 
