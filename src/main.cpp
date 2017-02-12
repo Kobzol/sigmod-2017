@@ -4,23 +4,28 @@
 #include <regex>
 #include <unordered_map>
 #include <unordered_set>
-#include <omp.h>
+#include <chrono>
 
 #include "settings.h"
 #include "word.h"
 #include "dictionary.h"
 #include "query.h"
 #include "nfa.h"
+#include "thread.h"
 
 
 static Dictionary dict;
 static std::unordered_map<DictHash, std::vector<int>> prefixMap;
 static Nfa<ssize_t> nfa;
+std::vector<Word> ngrams;
+std::vector<Query> queries;
 
-std::vector<Word> load_init_data(std::istream& input)
+extern JobQueue jobQueue;
+
+static ThreadPool threadPool;
+
+void load_init_data(std::istream& input)
 {
-    std::vector<Word> ngrams;
-
     while (true)
     {
         std::string line;
@@ -35,11 +40,9 @@ std::vector<Word> load_init_data(std::istream& input)
             ngrams.emplace_back(dict.createWord(line), 0);
         }
     }
-
-    return ngrams;
 }
 
-void find_in_document(Query& query, const std::vector<Word>& ngrams)
+void find_in_document(Query& query)
 {
     std::vector<Match> matches;
     size_t timestamp = query.timestamp;
@@ -122,7 +125,7 @@ int main()
 
     initLinearMap();
 
-    std::vector<Word> ngrams = load_init_data(input);
+    load_init_data(input);
 
     for (size_t i = 0; i < ngrams.size(); i++)
     {
@@ -141,7 +144,6 @@ int main()
 #endif
     }
 
-    std::vector<Query> queries;
     queries.reserve(10000);
     size_t timestamp = 0;
 
@@ -202,6 +204,7 @@ int main()
             line = line.substr(2);
 
             queries.emplace_back(line, timestamp);
+            jobQueue.add_query(queries.size() - 1);
 
 #ifdef PRINT_STATISTICS
             query_count++;
@@ -223,18 +226,13 @@ int main()
             batch_count++;
             batch_size += queries.size();
 #endif
-
-            // do queries in parallel
-            #pragma omp parallel for
-            for (size_t i = 0; i < queries.size(); i++)
-            {
-                Query& query = queries.at(i);
-                find_in_document(query, ngrams);
-            }
-
             // print results
             for (Query& query : queries)
             {
+                while (!query.jobFinished)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
                 std::cout << query.result << std::endl;
             }
 
