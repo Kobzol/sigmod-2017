@@ -113,6 +113,8 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
 
 int main()
 {
+    std::ios::sync_with_stdio(false);
+
 #ifdef LOAD_FROM_FILE
     std::fstream file(LOAD_FROM_FILE, std::iostream::in);
 
