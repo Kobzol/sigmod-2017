@@ -144,7 +144,7 @@ int main()
 #endif
     }
 
-    queries.reserve(10000);
+    queries.reserve(100000);    // TODO: copy query in thread
     size_t timestamp = 0;
 
     std::cout << "R" << std::endl;

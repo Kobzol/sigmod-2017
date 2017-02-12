@@ -5,7 +5,7 @@
 class Query
 {
 public:
-    Query(std::string document, size_t timestamp): timestamp(timestamp), document(document)
+    Query(std::string document, size_t timestamp): timestamp(timestamp), document(document), jobFinished{false}
     {
 
     }

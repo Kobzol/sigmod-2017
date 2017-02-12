@@ -12,4 +12,4 @@ using DictHash = unsigned int;
 #define HASH_NOT_FOUND ((DictHash) -1)
 
 #define NO_JOB ((ssize_t) -1)
-#define THREAD_POOL_THREAD_COUNT (3)
+#define THREAD_POOL_THREAD_COUNT (39)

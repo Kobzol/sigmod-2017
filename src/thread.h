@@ -37,15 +37,6 @@ public:
         }
     }
 
-    /*void terminate()
-    {
-        this->terminated = true;
-    }
-    void join()
-    {
-        this->handle.join();
-    }*/
-
     size_t id;
 
 private:
@@ -63,21 +54,6 @@ public:
             this->threads[i].id = i + 1;
         }
     }
-
-    /*void terminate()
-    {
-        for (size_t i = 0; i < THREAD_POOL_THREAD_COUNT; i++)
-        {
-            this->threads[i].terminate();
-        }
-    }
-    void join()
-    {
-        for (size_t i = 0; i < THREAD_POOL_THREAD_COUNT; i++)
-        {
-            this->threads[i].join();
-        }
-    }*/
 
 private:
     Thread threads[THREAD_POOL_THREAD_COUNT];
