@@ -17,20 +17,21 @@ public:
     }
     DictHash get_hash_maybe(const std::string& word)
     {
-        if (!this->dictionary.count(word))
+        auto it = this->dictionary.find(word);
+        if (it == this->dictionary.end())
         {
             return HASH_NOT_FOUND;
         }
 
-        return this->dictionary.at(word);
+        return it->second;
     }
 
     const std::string& get_string(DictHash hash)
     {
-        if (!this->backMapping.count(hash))
+        /*if (!this->backMapping.count(hash))
         {
             std::cerr << "ERROR, NO HASH FOUND" << std::endl;
-        }
+        }*/
 
         return this->backMapping.at(hash);
     }
@@ -49,17 +50,16 @@ public:
         return this->get_hash(word);
     }
 
-    void createWord(const std::string& word, std::vector<DictHash>& hashList)
+    void createWord(const std::string& word, size_t start, std::vector<DictHash>& hashList)
     {
         std::string prefix;
-
-        for (size_t i = 0; i < word.size(); i++)
+        for (size_t i = start; i < word.size(); i++)
         {
             char c = word.at(i);
             if (c == ' ')
             {
                 hashList.push_back(this->insert(prefix));
-                prefix = "";
+                prefix.clear();
             }
             else
             {

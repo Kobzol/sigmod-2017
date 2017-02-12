@@ -39,12 +39,13 @@ class HashNfaState : public NfaState<MapType>
 public:
     ssize_t get_arc(const MapType& input) override
     {
-        if (this->arcs.count(input))
+        auto it = this->arcs.find(input);
+        if (it == this->arcs.end())
         {
-            return this->arcs.at(input);
+            return NO_ARC;
         }
 
-        return NO_ARC;
+        return it->second;
     }
 
     void add_arc(const MapType& input, size_t index) override
