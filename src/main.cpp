@@ -55,7 +55,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
         DictHash hash = lineWord.hashList.at(i);
         if (hash != HASH_NOT_FOUND)
         {
-            nfa.feedWord(visitor, lineWord.hashList.at(i), indices);
+            nfa.feedWord(visitor, hash, indices);
 
             for (ssize_t index : indices)
             {
@@ -225,7 +225,7 @@ int main()
 #endif
 
             // do queries in parallel
-            #pragma omp parallel for
+            //#pragma omp parallel for
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);

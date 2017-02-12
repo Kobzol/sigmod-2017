@@ -11,26 +11,32 @@
 class Dictionary
 {
 public:
+    Dictionary()
+    {
+
+    }
+
     DictHash get_hash(const std::string& word)
     {
         return this->dictionary.at(word);
     }
     DictHash get_hash_maybe(const std::string& word)
     {
-        if (!this->dictionary.count(word))
+        auto it = this->dictionary.find(word);
+        if (it == this->dictionary.end())
         {
             return HASH_NOT_FOUND;
         }
 
-        return this->dictionary.at(word);
+        return it->second;
     }
 
     const std::string& get_string(DictHash hash)
     {
-        if (!this->backMapping.count(hash))
+        /*if (!this->backMapping.count(hash))
         {
             std::cerr << "ERROR, NO HASH FOUND" << std::endl;
-        }
+        }*/
 
         return this->backMapping.at(hash);
     }
@@ -39,7 +45,7 @@ public:
     {
         if (!this->dictionary.count(word))
         {
-            DictHash hash = this->dictionary.size();
+            DictHash hash = this->dictionary.size() + 1;
             this->dictionary.insert({word, hash});
             this->backMapping.insert({hash, word});
 
@@ -60,7 +66,7 @@ public:
             if (c == ' ')
             {
                 hashList.push_back(this->insert(prefix));
-                prefix = "";
+                prefix.clear();
             }
             else
             {
@@ -83,7 +89,7 @@ public:
             if (c == ' ')
             {
                 hashList.push_back(this->get_hash_maybe(prefix));
-                prefix = "";
+                prefix.clear();
             }
             else
             {
