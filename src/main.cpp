@@ -115,6 +115,8 @@ int main()
 {
     std::ios::sync_with_stdio(false);
 
+    initLinearMap();
+
 #ifdef LOAD_FROM_FILE
     std::fstream file(LOAD_FROM_FILE, std::iostream::in);
 
@@ -235,7 +237,7 @@ int main()
             queries.resize(queries.size() - 1);
 
             // do queries in parallel
-            #pragma omp parallel for
+            #pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);

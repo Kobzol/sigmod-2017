@@ -9,6 +9,10 @@
 #define NOT_FINAL_STATE ((ssize_t) -1)
 #define NO_ARC ((ssize_t) -1)
 
+#define LINEAR_MAP_SIZE (1024 * 1024)
+extern ssize_t* linearMap;
+void initLinearMap();
+
 class NfaVisitor
 {
 public:
@@ -55,6 +59,21 @@ public:
 
 private:
     std::unordered_map<MapType, size_t> arcs;
+};
+
+template <typename MapType>
+class LinearMapNfaState : public NfaState<MapType>
+{
+public:
+    ssize_t get_arc(const MapType& input) override
+    {
+        return linearMap[input];
+    }
+
+    void add_arc(const MapType& input, size_t index) override
+    {
+        linearMap[input] = index;
+    }
 };
 
 template <typename MapType>
@@ -106,7 +125,7 @@ class Nfa
 public:
     Nfa()
     {
-        this->states.push_back(new HashNfaState<MapType>());    // add root state
+        this->states.push_back(new LinearMapNfaState<MapType>());    // add root state
     }
 
     void addWord(Word& word, size_t wordIndex)
