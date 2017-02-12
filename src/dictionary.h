@@ -55,12 +55,12 @@ public:
         return this->get_hash(word);
     }
 
-    std::vector<DictHash> createWord(const std::string& word)
+    std::vector<DictHash> createWord(const std::string& word, size_t start)
     {
         std::vector<DictHash> hashList;
         std::string prefix;
 
-        for (size_t i = 0; i < word.size(); i++)
+        for (size_t i = start; i < word.size(); i++)
         {
             char c = word.at(i);
             if (c == ' ')

@@ -32,7 +32,7 @@ std::vector<Word> load_init_data(std::istream& input)
         }
         else
         {
-            ngrams.emplace_back(dict.createWord(line), 0);
+            ngrams.emplace_back(dict.createWord(line, 0), 0);
         }
     }
 
@@ -149,41 +149,38 @@ int main()
 
     while (true)
     {
-        std::string line;
+        timestamp++;
+        queries.emplace_back(timestamp);
+
+        std::string& line = queries.at(queries.size() - 1).document;
         if (!std::getline(input, line) || line.size() == 0) break;
         char op = line[0];
-        timestamp++;
 
         if (op == 'A')
         {
-            line = line.substr(2);
-
-            ngrams.emplace_back(dict.createWord(line), timestamp);
+            ngrams.emplace_back(dict.createWord(line, 2), timestamp);
             size_t index = ngrams.size() - 1;
             DictHash prefix = ngrams.at(index).hashList.at(0);
-            if (!prefixMap.count(prefix))
-            {
-                prefixMap[prefix] = std::vector<int>();
-            }
-            prefixMap.at(prefix).emplace_back(index);
+            prefixMap[prefix].emplace_back(index);
 
-            nfa.addWord(ngrams.at(ngrams.size() - 1), ngrams.size() - 1);
+            nfa.addWord(ngrams.at(index), index);
+
+            queries.resize(queries.size() - 1);
 
 #ifdef PRINT_STATISTICS
-        additions++;
+            additions++;
         ngram_length += line.size();
 #endif
         }
         else if (op == 'D')
         {
-            line = line.substr(2);
-
-            Word word(dict.createWord(line), 0);
+            Word word(dict.createWord(line, 2), 0);
             DictHash prefix = word.hashList.at(0);
 
-            if (prefixMap.count(prefix))
+            auto it = prefixMap.find(prefix);
+            if (it != prefixMap.end())
             {
-                for (int i : prefixMap.at(prefix))
+                for (int i : it->second)
                 {
                     Word& ngram = ngrams.at(i);
                     if (ngram.is_active(timestamp) && ngram == word)
@@ -193,16 +190,14 @@ int main()
                 }
             }
 
+            queries.resize(queries.size() - 1);
+
 #ifdef PRINT_STATISTICS
             deletions++;
 #endif
         }
         else if (op == 'Q')
         {
-            line = line.substr(2);
-
-            queries.emplace_back(line, timestamp);
-
 #ifdef PRINT_STATISTICS
             query_count++;
             query_length += line.size();
@@ -223,9 +218,10 @@ int main()
             batch_count++;
             batch_size += queries.size();
 #endif
+            queries.resize(queries.size() - 1);
 
             // do queries in parallel
-            //#pragma omp parallel for
+            #pragma omp parallel for
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);
