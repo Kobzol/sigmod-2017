@@ -92,7 +92,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     for (size_t i = 1; i < matches.size(); i++)
     {
         Match& match = matches.at(i);
-        if (!found.count(match.word))
+        if (found.find(match.word) == found.end())
         {
             query.result += '|';
             query.result += match.word;
@@ -103,6 +103,8 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
 
 int main()
 {
+    std::ios::sync_with_stdio(false);
+
 #ifdef LOAD_FROM_FILE
     std::fstream file(LOAD_FROM_FILE, std::iostream::in);
 
@@ -143,6 +145,7 @@ int main()
     size_t timestamp = 0;
     std::vector<Query> queries;
     queries.reserve(10000);
+    ngrams.reserve(1000 * 1000);
 
     std::cout << "R" << std::endl;
 
@@ -159,11 +162,7 @@ int main()
 
             ngrams.emplace_back(line, timestamp);
             std::string prefix = find_prefix(line);
-            if (!prefixMap.count(prefix))
-            {
-                prefixMap[prefix] = std::vector<int>();
-            }
-            prefixMap.at(prefix).emplace_back(ngrams.size() - 1);
+            prefixMap[prefix].emplace_back(ngrams.size() - 1);
 
             nfa.addWord(ngrams.at(ngrams.size() - 1), ngrams.size() - 1);
 
@@ -179,9 +178,10 @@ int main()
             // TODO: try linear search
             std::string prefix = find_prefix(line);
 
-            if (prefixMap.count(prefix))
+            auto it = prefixMap.find(prefix);
+            if (it != prefixMap.end())
             {
-                for (int i : prefixMap.at(prefix))
+                for (int i : it->second)
                 {
                     Word& ngram = ngrams.at(i);
                     if (ngram.is_active(timestamp) && ngram.word == line)
@@ -208,7 +208,7 @@ int main()
         }
         else
         {
-            //#pragma omp parallel for schedule(dynamic)
+            #pragma omp parallel for
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);
