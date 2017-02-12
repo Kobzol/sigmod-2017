@@ -3,11 +3,23 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
+#include <atomic>
+#include <mutex>
+#include <shared_mutex>
+#include <condition_variable>
+#include <shared_mutex>
+#include <tbb/concurrent_unordered_map.h>
+
 #include "word.h"
 #include "util.h"
 
 #define NOT_FINAL_STATE ((ssize_t) -1)
 #define NO_ARC ((ssize_t) -1)
+
+#define LINEAR_MAP_SIZE (1024 * 1000)
+extern ssize_t* linearMap;
+
+void init_linear_map();
 
 class NfaVisitor
 {
@@ -41,11 +53,11 @@ public:
 
     void add_arc(const MapType& input, size_t index) override
     {
-        this->arcs[input] = index;
+        this->arcs.insert({input, index});
     }
 
 //private:
-    std::unordered_map<MapType, size_t> arcs;
+    std::unordered_map<MapType, size_t> arcs{2000};
 };
 
 template <typename MapType>
@@ -91,6 +103,9 @@ private:
     std::vector<Mapping> arcs;
 };
 
+extern std::atomic<int> foundArcAt0;
+extern std::atomic<int> notFoundArcAt0;
+
 template <typename MapType>
 class Nfa
 {
@@ -98,6 +113,7 @@ public:
     Nfa()
     {
         this->states.push_back(new HashNfaState<MapType>());    // add root state
+        this->states.reserve(1000 * 1000);
     }
 
     void addWord(Word& word, size_t wordIndex)
@@ -113,6 +129,7 @@ public:
 
             if (arc == NO_ARC)
             {
+                //std::unique_lock<std::shared_timed_mutex> lock(this->mutex);
                 size_t state = this->createState();
                 this->states.at(activeState)->add_arc(prefix, state);
                 activeState = state;
@@ -133,12 +150,16 @@ public:
         visitor.states[nextStateIndex].clear();
         visitor.states[currentStateIndex].insert(0);
 
+        //std::shared_lock<std::shared_timed_mutex> lock(this->mutex);
         for (ssize_t stateId : visitor.states[currentStateIndex])
         {
             NfaState<MapType>* state = this->states.at(stateId);
-            ssize_t nextStateId = state->get_arc(input);
+            ssize_t nextStateId;
+
+            nextStateId = state->get_arc(input);
             if (nextStateId != NO_ARC)
             {
+                if (stateId == 0) foundArcAt0++;
                 visitor.states[nextStateIndex].insert(nextStateId);
 
                 NfaState<MapType>* nextState = this->states.at(nextStateId);
@@ -147,13 +168,21 @@ public:
                     results.push_back(nextState->wordIndex);
                 }
             }
+            else if (stateId == 0)
+            {
+                notFoundArcAt0++;
+            }
         }
 
         visitor.stateIndex = nextStateIndex;
     }
 
-//private:
+private:
     std::vector<NfaState<MapType>*> states;
+    std::shared_timed_mutex mutex;
+    std::atomic<bool> inserting{0};
+    std::atomic<int> reading{0};
+    std::condition_variable waitVar;
 
     size_t createState()
     {

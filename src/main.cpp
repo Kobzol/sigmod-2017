@@ -4,20 +4,33 @@
 #include <regex>
 #include <unordered_map>
 #include <unordered_set>
+#include <thread>
+#include <chrono>
 
 #include "settings.h"
 #include "word.h"
 #include "query.h"
 #include "util.h"
 #include "nfa.h"
+#include "job.h"
+#include "thread.h"
 
 static std::unordered_map<std::string, std::vector<int>> prefixMap;
 static Nfa<std::string> nfa;
 
-std::vector<Word> load_init_data(std::istream& input)
-{
-    std::vector<Word> ngrams;
+#ifndef SOLVE_ON_MAIN_THREAD
+    static ThreadPool threadPool;
+    extern JobQueue jobQueue;
+#endif
 
+static std::vector<Word> ngrams;
+std::vector<Query> queries;
+
+extern std::atomic<int> foundArcAt0;
+extern std::atomic<int> notFoundArcAt0;
+
+void load_init_data(std::istream& input)
+{
     while (true)
     {
         std::string line;
@@ -32,11 +45,9 @@ std::vector<Word> load_init_data(std::istream& input)
             ngrams.emplace_back(line, 0);
         }
     }
-
-    return ngrams;
 }
 
-void find_in_document(Query& query, const std::vector<Word>& ngrams)
+void find_in_document(Query& query)
 {
     std::string prefix;
     std::vector<Match> matches;
@@ -121,7 +132,9 @@ int main()
     size_t query_length = 0, ngram_length = 0;
 #endif
 
-    std::vector<Word> ngrams = load_init_data(input);
+    init_linear_map();
+
+    load_init_data(input);
 
     for (size_t i = 0; i < ngrams.size(); i++)
     {
@@ -141,8 +154,9 @@ int main()
     }
 
     size_t timestamp = 0;
-    std::vector<Query> queries;
-    queries.reserve(10000);
+
+    ngrams.reserve(1000 * 1000);
+    queries.reserve(100 * 1000);
 
     std::cout << "R" << std::endl;
 
@@ -201,6 +215,12 @@ int main()
 
             queries.emplace_back(line, timestamp);
 
+#ifdef SOLVE_ON_MAIN_THREAD
+            find_in_document(queries.at(queries.size() - 1));
+#else
+            jobQueue.add_query(queries.size() - 1);
+#endif
+
 #ifdef PRINT_STATISTICS
             query_count++;
             query_length += line.size();
@@ -208,17 +228,21 @@ int main()
         }
         else
         {
-            //#pragma omp parallel for schedule(dynamic)
-            for (size_t i = 0; i < queries.size(); i++)
-            {
-                Query& query = queries.at(i);
-                find_in_document(query, ngrams);
-            }
-
-            for (Query& query : queries)
+#ifdef SOLVE_ON_MAIN_THREAD
+            for (auto& query : queries)
             {
                 std::cout << query.result << std::endl;
             }
+#else
+            for (Query& query : queries)
+            {
+                while (!query.jobFinished)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
+                std::cout << query.result << std::endl;
+            }
+#endif
 
             queries.clear();
 
@@ -239,6 +263,9 @@ int main()
     std::cerr << "Hash state size: " << (double) stateSum  << std::endl;
 
 #endif
+
+    std::cerr << "Found: " << foundArcAt0 << std::endl;
+    std::cerr << "Not found: " << notFoundArcAt0 << std::endl;
 
     return 0;
 }

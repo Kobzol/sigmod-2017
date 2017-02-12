@@ -9,7 +9,10 @@ IF(REAL_RUN)
     ADD_DEFINITIONS(-DREAL_RUN)
 ENDIF(REAL_RUN)
 
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -fopenmp -march=native -std=c++14 -Wall")
+include_directories("/usr/include/tbb/")
+link_libraries("tbb")
+
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -pthread -march=native -std=c++14 -Wall")
 
 set(SOURCE_FILES src/main.cpp src/word.cpp src/nfa.cpp src/util.cpp)
 add_executable(sigmod_2017 ${SOURCE_FILES})
