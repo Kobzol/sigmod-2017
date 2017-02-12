@@ -12,7 +12,15 @@
 class NfaVisitor
 {
 public:
-    std::unordered_set<ssize_t> states[2];
+    NfaVisitor()
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            this->states[i].reserve(5);
+        }
+    }
+
+    std::vector<ssize_t> states[2];
     size_t stateIndex = 0;
 };
 
@@ -126,7 +134,7 @@ public:
         size_t nextStateIndex = 1 - currentStateIndex;
 
         visitor.states[nextStateIndex].clear();
-        visitor.states[currentStateIndex].insert(0);
+        visitor.states[currentStateIndex].push_back(0);
 
         for (ssize_t stateId : visitor.states[currentStateIndex])
         {
@@ -134,7 +142,7 @@ public:
             ssize_t nextStateId = state->get_arc(input);
             if (nextStateId != NO_ARC)
             {
-                visitor.states[nextStateIndex].insert(nextStateId);
+                visitor.states[nextStateIndex].push_back(nextStateId);
 
                 NfaState<MapType>* nextState = this->states.at(nextStateId);
                 if (nextState->wordIndex != NOT_FINAL_STATE)

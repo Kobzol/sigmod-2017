@@ -81,21 +81,6 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
         }
     }
 
-    /*for (size_t i = 0; i < lineWord.hashList.size(); i++)
-    {
-        std::vector<ssize_t> indices;
-        nfa.feedWord(visitor, lineWord.hashList.at(i), indices);
-
-        for (ssize_t index : indices)
-        {
-            const Word& word = ngrams.at(index);
-            if (word.is_active(timestamp))
-            {
-                matches.emplace_back(i - word.hashList.size(), dict.createString(word));  // TODO: subtract string length
-            }
-        }
-    }*/
-
     std::sort(matches.begin(), matches.end(), [](Match& m1, Match& m2)
     {
         if (m1.index < m2.index) return true;
@@ -252,7 +237,7 @@ int main()
 #endif
 
             // do queries in parallel
-            //#pragma omp parallel for schedule(dynamic)
+            //#pragma omp parallel for
             for (size_t i = 0; i < queries.size(); i++)
             {
                 Query& query = queries.at(i);
