@@ -57,7 +57,7 @@ public:
     }
 
 //private:
-    std::unordered_map<MapType, size_t> arcs{2000};
+    tbb::concurrent_unordered_map<MapType, size_t> arcs{2000};
 };
 
 template <typename MapType>
@@ -102,9 +102,6 @@ private:
 
     std::vector<Mapping> arcs;
 };
-
-extern std::atomic<int> foundArcAt0;
-extern std::atomic<int> notFoundArcAt0;
 
 template <typename MapType>
 class Nfa
@@ -159,7 +156,6 @@ public:
             nextStateId = state->get_arc(input);
             if (nextStateId != NO_ARC)
             {
-                if (stateId == 0) foundArcAt0++;
                 visitor.states[nextStateIndex].insert(nextStateId);
 
                 NfaState<MapType>* nextState = this->states.at(nextStateId);
@@ -167,10 +163,6 @@ public:
                 {
                     results.push_back(nextState->wordIndex);
                 }
-            }
-            else if (stateId == 0)
-            {
-                notFoundArcAt0++;
             }
         }
 

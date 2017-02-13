@@ -26,9 +26,6 @@ static Nfa<std::string> nfa;
 static std::vector<Word> ngrams;
 std::vector<Query> queries;
 
-extern std::atomic<int> foundArcAt0;
-extern std::atomic<int> notFoundArcAt0;
-
 void load_init_data(std::istream& input)
 {
     while (true)
@@ -114,6 +111,8 @@ void find_in_document(Query& query)
 
 int main()
 {
+    std::ios::sync_with_stdio(false);
+
 #ifdef LOAD_FROM_FILE
     std::fstream file(LOAD_FROM_FILE, std::iostream::in);
 
@@ -263,9 +262,6 @@ int main()
     std::cerr << "Hash state size: " << (double) stateSum  << std::endl;
 
 #endif
-
-    std::cerr << "Found: " << foundArcAt0 << std::endl;
-    std::cerr << "Not found: " << notFoundArcAt0 << std::endl;
 
     return 0;
 }

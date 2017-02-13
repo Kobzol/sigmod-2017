@@ -9,6 +9,6 @@
 //#define PRINT_STATISTICS
 
 #define NO_JOB ((ssize_t) -1)
-#define THREAD_POOL_THREAD_COUNT (8)
+#define THREAD_POOL_THREAD_COUNT (25)
 
-#define SOLVE_ON_MAIN_THREAD
+//#define SOLVE_ON_MAIN_THREAD
