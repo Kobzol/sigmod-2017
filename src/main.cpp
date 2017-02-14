@@ -182,17 +182,17 @@ int main()
     }
 
     std::vector<Query> queries;
-    queries.reserve(100000);
+    queries.resize(100000);
     size_t timestamp = 0;
+    size_t queryIndex = 0;
 
     std::cout << "R" << std::endl;
 
     while (true)
     {
         timestamp++;
-        queries.emplace_back(timestamp);
 
-        std::string& line = queries.at(queries.size() - 1).document;
+        std::string& line = queries.at(queryIndex).document;
         if (!std::getline(input, line) || line.size() == 0) break;
         char op = line[0];
 
@@ -205,8 +205,6 @@ int main()
             prefixMap[prefix].emplace_back(index);
 
             nfa.addWord(ngrams.at(index), index);
-
-            queries.resize(queries.size() - 1);
 
 #ifdef PRINT_STATISTICS
         additions++;
@@ -233,14 +231,21 @@ int main()
                 }
             }
 
-            queries.resize(queries.size() - 1);
-
 #ifdef PRINT_STATISTICS
             deletions++;
 #endif
         }
         else if (op == 'Q')
         {
+            queries.at(queryIndex).timestamp = timestamp;
+            queries.at(queryIndex).result.clear();
+            queryIndex++;
+
+            if (queryIndex >= queries.size())
+            {
+                queries.resize(queries.size() * 2);
+            }
+
 #ifdef PRINT_STATISTICS
             query_count++;
             query_length += line.size();
@@ -261,11 +266,9 @@ int main()
             batch_count++;
             batch_size += queries.size();
 #endif
-            queries.resize(queries.size() - 1);
-
             // do queries in parallel
             #pragma omp parallel for schedule(dynamic)
-            for (size_t i = 0; i < queries.size(); i++)
+            for (size_t i = 0; i < queryIndex; i++)
             {
                 Query& query = queries.at(i);
                 find_in_document(query, ngrams);
@@ -275,18 +278,17 @@ int main()
 #ifdef PRINT_STATISTICS
             writeResultTimer.start();
 #endif
-            for (Query& query : queries)
+            for (size_t i = 0; i < queryIndex; i++)
             {
 #ifdef PRINT_STATISTICS
-                result_length += query.result.size();
+                result_length += queries.at(i).result.size();
 #endif
-                std::cout << query.result << std::endl;
+                std::cout << queries.at(i).result << std::endl;
             }
 #ifdef PRINT_STATISTICS
             writeResultTimer.add();
 #endif
-
-            queries.clear();
+            queryIndex = 0;
 
             std::cout << std::flush;
         }
