@@ -4,17 +4,26 @@
 #include <regex>
 #include <unordered_map>
 #include <unordered_set>
+#include <atomic>
+#include <sstream>
 
 #include "settings.h"
 #include "word.h"
 #include "dictionary.h"
 #include "query.h"
 #include "nfa.h"
+#include "timer.h"
 
 
 static Dictionary dict;
 static std::unordered_map<DictHash, std::vector<int>> prefixMap;
 static Nfa<size_t> nfa;
+
+#ifdef PRINT_STATISTICS
+    static std::atomic<int> calcCount{0};
+    static std::atomic<int> sortCount{0};
+    static std::atomic<int> writeStringCount{0};
+#endif
 
 std::vector<Word> load_init_data(std::istream& input)
 {
@@ -47,6 +56,11 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     line += ' ';
 
     NfaVisitor visitor;
+
+#ifdef PRINT_STATISTICS
+    Timer timer;
+    timer.start();
+#endif
 
     std::string prefix;
     for (size_t i = 2; i < line.size(); i++)
@@ -81,12 +95,22 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
         }
     }
 
+#ifdef PRINT_STATISTICS
+    calcCount += timer.get();
+    timer.reset();
+#endif
+
     std::sort(matches.begin(), matches.end(), [](Match& m1, Match& m2)
     {
         if (m1.index < m2.index) return true;
         else if (m1.index > m2.index) return false;
         else return m1.word.size() <= m2.word.size();
     });
+
+#ifdef PRINT_STATISTICS
+    sortCount += timer.get();
+    timer.reset();
+#endif
 
     std::unordered_set<std::string> found;
     if (matches.size() == 0)
@@ -102,13 +126,17 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     for (size_t i = 1; i < matches.size(); i++)
     {
         Match& match = matches.at(i);
-        if (!found.count(match.word))
+        if (found.find(match.word) == found.end())
         {
             query.result += '|';
             query.result += match.word;
             found.insert(match.word);
         }
     }
+
+#ifdef PRINT_STATISTICS
+    writeStringCount += timer.get();
+#endif
 }
 
 int main()
@@ -133,7 +161,8 @@ int main()
 #ifdef PRINT_STATISTICS
     int additions = 0, deletions = 0, query_count = 0, init_ngrams = 0;
     size_t query_length = 0, ngram_length = 0, ngram_hashes_length = 0, document_word_count = 0;
-    size_t batch_count = 0, batch_size = 0;
+    size_t batch_count = 0, batch_size = 0, result_length = 0;
+    Timer writeResultTimer;
 #endif
 
     std::vector<Word> ngrams = load_init_data(input);
@@ -153,7 +182,7 @@ int main()
     }
 
     std::vector<Query> queries;
-    queries.reserve(10000);
+    queries.reserve(100000);
     size_t timestamp = 0;
 
     std::cout << "R" << std::endl;
@@ -243,10 +272,19 @@ int main()
             }
 
             // print results
+#ifdef PRINT_STATISTICS
+            writeResultTimer.start();
+#endif
             for (Query& query : queries)
             {
+#ifdef PRINT_STATISTICS
+                result_length += query.result.size();
+#endif
                 std::cout << query.result << std::endl;
             }
+#ifdef PRINT_STATISTICS
+            writeResultTimer.add();
+#endif
 
             queries.clear();
 
@@ -263,8 +301,13 @@ int main()
     std::cerr << "Average document word count: " << document_word_count / (double) query_count << std::endl;
     std::cerr << "Average ngram length: " << ngram_length / (double) ngrams.size() << std::endl;
     std::cerr << "Average ngram word count: " << ngram_hashes_length / (double) ngrams.size() << std::endl;
+    std::cerr << "Average result length: " << result_length / (double) query_count << std::endl;
     std::cerr << "Batch count: " << batch_count << std::endl;
     std::cerr << "Average batch size: " << batch_size / (double) batch_count << std::endl;
+    std::cerr << "Calc time: " << calcCount << std::endl;
+    std::cerr << "Sort time: " << sortCount << std::endl;
+    std::cerr << "Write string time: " << writeStringCount << std::endl;
+    std::cerr << "Write result time: " << writeResultTimer.total << std::endl;
 #endif
 
     return 0;

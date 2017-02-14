@@ -6,7 +6,7 @@
     #define LOAD_FROM_FILE "small.load"
 #endif
 
-//#define PRINT_STATISTICS
+#define PRINT_STATISTICS
 
 using DictHash = unsigned int;
 #define HASH_NOT_FOUND ((DictHash) -1)
