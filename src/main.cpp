@@ -132,7 +132,7 @@ int main()
 
 #ifdef PRINT_STATISTICS
     int additions = 0, deletions = 0, query_count = 0, init_ngrams = 0;
-    size_t query_length = 0, ngram_length = 0, document_word_count = 0;
+    size_t query_length = 0, ngram_length = 0, ngram_hashes_length = 0, document_word_count = 0;
     size_t batch_count = 0, batch_size = 0;
 #endif
 
@@ -141,17 +141,14 @@ int main()
     for (size_t i = 0; i < ngrams.size(); i++)
     {
         DictHash prefix = ngrams.at(i).hashList.at(0);
-        if (!prefixMap.count(prefix))
-        {
-            prefixMap[prefix] = std::vector<int>();
-        }
-        prefixMap.at(prefix).emplace_back(i);
+        prefixMap[prefix].emplace_back(i);
 
         nfa.addWord(ngrams.at(i), i);
 
 #ifdef PRINT_STATISTICS
         init_ngrams++;
         ngram_length += dict.createString(ngrams.at(i)).size();
+        ngram_hashes_length += ngrams.at(i).hashList.size();
 #endif
     }
 
@@ -185,6 +182,7 @@ int main()
 #ifdef PRINT_STATISTICS
         additions++;
         ngram_length += line.size();
+        ngram_hashes_length += ngrams.at(index).hashList.size();
 #endif
         }
         else if (op == 'D')
@@ -261,12 +259,12 @@ int main()
     std::cerr << "Additions: " << additions << std::endl;
     std::cerr << "Deletions: " << deletions << std::endl;
     std::cerr << "Queries: " << query_count << std::endl;
-    std::cerr << "Average document length: " << query_length / query_count << std::endl;
-    std::cerr << "Average document word count: " << document_word_count / query_count << std::endl;
-    std::cerr << "Average ngram length: " << ngram_length / ngrams.size() << std::endl;
+    std::cerr << "Average document length: " << query_length / (double) query_count << std::endl;
+    std::cerr << "Average document word count: " << document_word_count / (double) query_count << std::endl;
+    std::cerr << "Average ngram length: " << ngram_length / (double) ngrams.size() << std::endl;
+    std::cerr << "Average ngram word count: " << ngram_hashes_length / (double) ngrams.size() << std::endl;
     std::cerr << "Batch count: " << batch_count << std::endl;
-    std::cerr << "Average batch size: " << batch_size / batch_count << std::endl;
-
+    std::cerr << "Average batch size: " << batch_size / (double) batch_count << std::endl;
 #endif
 
     return 0;
