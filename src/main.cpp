@@ -5,7 +5,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <atomic>
-#include <sstream>
 
 #include "settings.h"
 #include "word.h"
@@ -13,7 +12,7 @@
 #include "query.h"
 #include "nfa.h"
 #include "timer.h"
-
+#include <omp.h>
 
 static Dictionary dict;
 static std::unordered_map<DictHash, std::vector<int>> prefixMap;
@@ -23,7 +22,14 @@ static Nfa<size_t> nfa;
     static std::atomic<int> calcCount{0};
     static std::atomic<int> sortCount{0};
     static std::atomic<int> writeStringCount{0};
+    static std::atomic<int> hashFound{0};
+    static std::atomic<int> hashNotFound{0};
+    static std::atomic<int> stringCreateTime{0};
+    static std::atomic<int> noActiveFound{0};
+    static std::atomic<int> duplicateNgramFound{0};
+    static std::atomic<int> noDuplicateFound{0};
 #endif
+
 
 std::vector<Word> load_init_data(std::istream& input)
 {
@@ -51,6 +57,7 @@ std::vector<Word> load_init_data(std::istream& input)
 void find_in_document(Query& query, const std::vector<Word>& ngrams)
 {
     std::vector<Match> matches;
+    std::unordered_set<ssize_t> found;
     size_t timestamp = query.timestamp;
     std::string& line = query.document;
     line += ' ';
@@ -63,36 +70,62 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
 #endif
 
     std::string prefix;
-    for (size_t i = 2; i < line.size(); i++)
+    std::vector<ssize_t> indices;
+    int size = (int) line.size();
+    for (int i = 2; i < size; i++)
     {
         char c = line.at(i);
-        if (c == ' ')
+        if (__builtin_expect(c == ' ', true))
         {
             DictHash hash = dict.get_hash_maybe(prefix);
-            if (hash != HASH_NOT_FOUND)
+            if (__builtin_expect(hash != HASH_NOT_FOUND, false))    // TODO: check
             {
-                std::vector<ssize_t> indices;
                 nfa.feedWord(visitor, hash, indices);
-
                 for (ssize_t index : indices)
                 {
                     const Word& word = ngrams.at(index);
-                    if (word.is_active(timestamp))
+#ifdef PRINT_STATISTICS
+                    if (!word.is_active(timestamp))
                     {
-                        std::string w = dict.createString(word);
+                        noActiveFound++;
+                    }
+                    if (found.find(index) != found.end())
+                    {
+                        duplicateNgramFound++;
+                    }
+                    else noDuplicateFound++;
+#endif
+                    if (word.is_active(timestamp) && found.find(index) == found.end())
+                    {
+                        found.insert(index);
+#ifdef PRINT_STATISTICS
+                        Timer stringTimer;
+                        stringTimer.start();
+#endif
 
-                        matches.emplace_back(i - w.size(), w);  // TODO: subtract string length
+                        std::string w = dict.createString(word);
+                        matches.emplace_back(i - w.size(), w);
+#ifdef PRINT_STATISTICS
+                        stringCreateTime += stringTimer.get();
+#endif
                     }
                 }
+                indices.clear();
+#ifdef PRINT_STATISTICS
+                hashFound++;
+#endif
             }
-            else visitor.states[visitor.stateIndex].clear();
+            else
+            {
+                visitor.states[visitor.stateIndex].clear();
+#ifdef PRINT_STATISTICS
+                hashNotFound++;
+#endif
+            }
 
             prefix.clear();
         }
-        else
-        {
-            prefix += c;
-        }
+        else prefix += c;
     }
 
 #ifdef PRINT_STATISTICS
@@ -112,26 +145,17 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     timer.reset();
 #endif
 
-    std::unordered_set<std::string> found;
     if (matches.size() == 0)
     {
         query.result += "-1";
     }
-    else
-    {
-        found.insert(matches.at(0).word);
-        query.result += matches.at(0).word;
-    }
+    else query.result += matches.at(0).word;
 
     for (size_t i = 1; i < matches.size(); i++)
     {
         Match& match = matches.at(i);
-        if (found.find(match.word) == found.end())
-        {
-            query.result += '|';
-            query.result += match.word;
-            found.insert(match.word);
-        }
+        query.result += '|';
+        query.result += match.word;
     }
 
 #ifdef PRINT_STATISTICS
@@ -141,6 +165,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
 
 int main()
 {
+    omp_set_num_threads(THREAD_COUNT);
     std::ios::sync_with_stdio(false);
 
     initLinearMap();
@@ -150,7 +175,7 @@ int main()
 
     if (!file.is_open())
     {
-        throw "File not found";
+        //throw "File not found";
     }
 
     std::istream& input = file;
@@ -162,6 +187,7 @@ int main()
     int additions = 0, deletions = 0, query_count = 0, init_ngrams = 0;
     size_t query_length = 0, ngram_length = 0, ngram_hashes_length = 0, document_word_count = 0;
     size_t batch_count = 0, batch_size = 0, result_length = 0;
+    size_t total_word_length = 0;
     Timer writeResultTimer;
 #endif
 
@@ -251,12 +277,13 @@ int main()
             query_length += line.size();
 
             document_word_count++;
-            for (size_t i = 0; i < line.size(); i++)
+            for (size_t i = 2; i < line.size(); i++)
             {
                 if (line.at(i) == ' ')
                 {
                     document_word_count++;
                 }
+                else total_word_length++;
             }
 #endif
         }
@@ -301,15 +328,23 @@ int main()
     std::cerr << "Queries: " << query_count << std::endl;
     std::cerr << "Average document length: " << query_length / (double) query_count << std::endl;
     std::cerr << "Average document word count: " << document_word_count / (double) query_count << std::endl;
+    std::cerr << "Average document word length: " << total_word_length / document_word_count << std::endl;
     std::cerr << "Average ngram length: " << ngram_length / (double) ngrams.size() << std::endl;
     std::cerr << "Average ngram word count: " << ngram_hashes_length / (double) ngrams.size() << std::endl;
     std::cerr << "Average result length: " << result_length / (double) query_count << std::endl;
+    std::cerr << "Hash found: " << hashFound << std::endl;
+    std::cerr << "Hash not found: " << hashNotFound << std::endl;
+    std::cerr << "Inactive ngrams found: " << noActiveFound << std::endl;
+    std::cerr << "Duplicate ngrams found: " << duplicateNgramFound << std::endl;
+    std::cerr << "NoDuplicate ngrams found: "<< noDuplicateFound << std::endl;
     std::cerr << "Batch count: " << batch_count << std::endl;
     std::cerr << "Average batch size: " << batch_size / (double) batch_count << std::endl;
     std::cerr << "Calc time: " << calcCount << std::endl;
     std::cerr << "Sort time: " << sortCount << std::endl;
-    std::cerr << "Write string time: " << writeStringCount << std::endl;
+    std::cerr << "String recreate time: " << stringCreateTime << std::endl;
+    std::cerr << "Create result time: " << writeStringCount << std::endl;
     std::cerr << "Write result time: " << writeResultTimer.total << std::endl;
+    std::cerr << std::endl;
 #endif
 
     return 0;
