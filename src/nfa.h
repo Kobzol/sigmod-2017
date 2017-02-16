@@ -134,18 +134,18 @@ public:
 
         for (DictHash prefix : word.hashList)
         {
-            ssize_t arc = this->states.at(activeState)->get_arc(prefix);
+            ssize_t arc = this->states[activeState]->get_arc(prefix);
 
             if (arc == NO_ARC)
             {
                 size_t state = this->createState();
-                this->states.at(activeState)->add_arc(prefix, state);
+                this->states[activeState]->add_arc(prefix, state);
                 activeState = state;
             }
             else activeState = arc;
         }
 
-        this->states.at(activeState)->wordIndex = wordIndex;
+        this->states[activeState]->wordIndex = wordIndex;
     }
 
     void feedWord(NfaVisitor& visitor, const MapType& input, std::vector<ssize_t>& results)
@@ -158,13 +158,13 @@ public:
 
         for (ssize_t stateId : visitor.states[currentStateIndex])
         {
-            NfaState<MapType>* state = this->states.at(stateId);
+            NfaState<MapType>* state = this->states[stateId];
             ssize_t nextStateId = state->get_arc(input);
             if (nextStateId != NO_ARC)
             {
                 visitor.states[nextStateIndex].push_back(nextStateId);
 
-                NfaState<MapType>* nextState = this->states.at(nextStateId);
+                NfaState<MapType>* nextState = this->states[nextStateId];
                 if (nextState->wordIndex != NOT_FINAL_STATE)
                 {
                     results.push_back(nextState->wordIndex);

@@ -47,7 +47,7 @@ std::vector<Word> load_init_data(std::istream& input)
         else
         {
             ngrams.emplace_back(0, line.size());
-            dict.createWord(line, 0, ngrams.at(ngrams.size() - 1).hashList);
+            dict.createWord(line, 0, ngrams[ngrams.size() - 1].hashList);
         }
     }
 
@@ -83,7 +83,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     int size = (int) line.size();
     for (int i = 2; i < size; i++)
     {
-        char c = line.at(i);
+        char c = line[i];
         if (__builtin_expect(c == ' ', true))
         {
             DictHash hash = dict.get_hash_maybe(prefix);
@@ -92,7 +92,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
                 nfa.feedWord(visitor, hash, indices);
                 for (ssize_t index : indices)
                 {
-                    const Word& word = ngrams.at(index);
+                    const Word& word = ngrams[index];
 #ifdef PRINT_STATISTICS
                     if (!word.is_active(timestamp))
                     {
@@ -156,11 +156,11 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     {
         query.result += "-1";
     }
-    else loadWord(matches.at(0).index, matches.at(0).length, query.result, query.document);
+    else loadWord(matches[0].index, matches[0].length, query.result, query.document);
 
     for (size_t i = 1; i < matches.size(); i++)
     {
-        Match& match = matches.at(i);
+        Match& match = matches[i];
         query.result += '|';
         loadWord(match.index, match.length, query.result, query.document);
     }
@@ -202,15 +202,15 @@ int main()
 
     for (size_t i = 0; i < ngrams.size(); i++)
     {
-        DictHash prefix = ngrams.at(i).hashList.at(0);
+        DictHash prefix = ngrams[i].hashList[0];
         prefixMap[prefix].emplace_back(i);
 
-        nfa.addWord(ngrams.at(i), i);
+        nfa.addWord(ngrams[i], i);
 
 #ifdef PRINT_STATISTICS
         init_ngrams++;
-        ngram_length += dict.createString(ngrams.at(i)).size();
-        ngram_hashes_length += ngrams.at(i).hashList.size();
+        ngram_length += dict.createString(ngrams[i]).size();
+        ngram_hashes_length += ngrams[i].hashList.size();
 #endif
     }
 
@@ -225,38 +225,38 @@ int main()
     {
         timestamp++;
 
-        std::string& line = queries.at(queryIndex).document;
+        std::string& line = queries[queryIndex].document;
         if (!std::getline(input, line) || line.size() == 0) break;
         char op = line[0];
 
         if (op == 'A')
         {
             ngrams.emplace_back(timestamp, line.size() - 2);
-            dict.createWord(line, 2, ngrams.at(ngrams.size() - 1).hashList);
+            dict.createWord(line, 2, ngrams[ngrams.size() - 1].hashList);
             size_t index = ngrams.size() - 1;
-            DictHash prefix = ngrams.at(index).hashList.at(0);
+            DictHash prefix = ngrams[index].hashList[0];
             prefixMap[prefix].emplace_back(index);
 
-            nfa.addWord(ngrams.at(index), index);
+            nfa.addWord(ngrams[index], index);
 
 #ifdef PRINT_STATISTICS
         additions++;
         ngram_length += line.size();
-        ngram_hashes_length += ngrams.at(index).hashList.size();
+        ngram_hashes_length += ngrams[index].hashList.size();
 #endif
         }
         else if (op == 'D')
         {
             Word word(0, 0);
             dict.createWord(line, 2, word.hashList);
-            DictHash prefix = word.hashList.at(0);
+            DictHash prefix = word.hashList[0];
 
             auto it = prefixMap.find(prefix);
             if (it != prefixMap.end())
             {
                 for (int i : it->second)
                 {
-                    Word& ngram = ngrams.at(i);
+                    Word& ngram = ngrams[i];
                     if (ngram.is_active(timestamp) && ngram == word)
                     {
                         ngram.deactivate(timestamp);
@@ -270,8 +270,8 @@ int main()
         }
         else if (op == 'Q')
         {
-            queries.at(queryIndex).timestamp = timestamp;
-            queries.at(queryIndex).result.clear();
+            queries[queryIndex].timestamp = timestamp;
+            queries[queryIndex].result.clear();
             queryIndex++;
 
             if (queryIndex >= queries.size())
@@ -286,7 +286,7 @@ int main()
             document_word_count++;
             for (size_t i = 2; i < line.size(); i++)
             {
-                if (line.at(i) == ' ')
+                if (line[i] == ' ')
                 {
                     document_word_count++;
                 }
@@ -304,8 +304,7 @@ int main()
             #pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queryIndex; i++)
             {
-                Query& query = queries.at(i);
-                find_in_document(query, ngrams);
+                find_in_document(queries[i], ngrams);
             }
 
             // print results
@@ -315,9 +314,9 @@ int main()
             for (size_t i = 0; i < queryIndex; i++)
             {
 #ifdef PRINT_STATISTICS
-                result_length += queries.at(i).result.size();
+                result_length += queries[i].result.size();
 #endif
-                std::cout << queries.at(i).result << std::endl;
+                std::cout << queries[i].result << std::endl;
             }
 #ifdef PRINT_STATISTICS
             writeResultTimer.add();

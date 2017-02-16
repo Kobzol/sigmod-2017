@@ -6,6 +6,7 @@
 #include <iostream>
 #include "word.h"
 #include "settings.h"
+//#include "sparsepp.h"
 
 
 class Dictionary
@@ -13,7 +14,7 @@ class Dictionary
 public:
     DictHash get_hash(const std::string& word)
     {
-        return this->dictionary.at(word);
+        return this->dictionary[word];
     }
     DictHash get_hash_maybe(const std::string& word)
     {
@@ -26,15 +27,15 @@ public:
         return it->second;
     }
 
-    const std::string& get_string(DictHash hash)
+    /*const std::string& get_string(DictHash hash)
     {
-        /*if (!this->backMapping.count(hash))
+        if (!this->backMapping.count(hash))
         {
             std::cerr << "ERROR, NO HASH FOUND" << std::endl;
-        }*/
+        }
 
         return this->backMapping.at(hash);
-    }
+    }*/
 
     DictHash insert(const std::string& word)
     {
@@ -42,7 +43,7 @@ public:
         {
             DictHash hash = this->dictionary.size();
             this->dictionary.insert({word, hash});
-            this->backMapping.insert({hash, word});
+            //this->backMapping.insert({hash, word});
 
             return hash;
         }
@@ -55,7 +56,7 @@ public:
         std::string prefix;
         for (size_t i = start; i < word.size(); i++)
         {
-            char c = word.at(i);
+            char c = word[i];
             if (c == ' ')
             {
                 hashList.push_back(this->insert(prefix));
@@ -75,7 +76,7 @@ public:
 
         for (size_t i = 0; i < word.size(); i++)
         {
-            char c = word.at(i);
+            char c = word[i];
             if (c == ' ')
             {
                 hashList.push_back(this->get_hash_maybe(prefix));
@@ -90,7 +91,7 @@ public:
         hashList.push_back(this->get_hash_maybe(prefix));
     }
 
-    std::string createString(const Word& word)
+    /*std::string createString(const Word& word)
     {
         std::string result = this->get_string(word.hashList.at(0));
 
@@ -101,7 +102,7 @@ public:
             result += this->get_string(word.hashList.at(i));
         }
         return result;
-    }
+    }*/
 
     size_t size()
     {
@@ -110,5 +111,5 @@ public:
 
 private:
     std::unordered_map<std::string, DictHash> dictionary;
-    std::unordered_map<DictHash, std::string> backMapping;
+    //std::unordered_map<DictHash, std::string> backMapping;
 };

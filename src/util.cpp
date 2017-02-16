@@ -27,7 +27,7 @@ size_t find_prefix_length(const std::string& word, size_t start_index)
     size_t length = 0;
     for (; start_index < word.size(); start_index++)
     {
-        if (word.at(start_index) == ' ') break;
+        if (word[start_index] == ' ') break;
         length++;
     }
 
