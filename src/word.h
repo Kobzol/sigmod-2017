@@ -7,8 +7,7 @@
 class Word
 {
 public:
-    Word(size_t from): from(from),
-                       to(UINT32_MAX)
+    Word(size_t from, int length): from(from), to(UINT32_MAX), length(length)
     {
 
     }
@@ -30,16 +29,17 @@ public:
     std::vector<DictHash> hashList;
     size_t from;
     size_t to;
+    int length;
 };
 
 class Match
 {
 public:
-    Match(int index, std::string word): index(index), word(word)
+    Match(int index, int length): index(index), length(length)
     {
 
     }
 
     int index;
-    std::string word;
+    int length;
 };

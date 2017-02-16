@@ -46,7 +46,7 @@ std::vector<Word> load_init_data(std::istream& input)
         }
         else
         {
-            ngrams.emplace_back(0);
+            ngrams.emplace_back(0, line.size());
             dict.createWord(line, 0, ngrams.at(ngrams.size() - 1).hashList);
         }
     }
@@ -54,6 +54,15 @@ std::vector<Word> load_init_data(std::istream& input)
     return ngrams;
 }
 
+void loadWord(int from, int length, std::string& target, const std::string& source)
+{
+    /*int to = from + length;
+    for (; from < to; from++)
+    {
+        target += source.at(from);
+    }*/
+    target += source.substr(from, length);
+}
 void find_in_document(Query& query, const std::vector<Word>& ngrams)
 {
     std::vector<Match> matches;
@@ -102,9 +111,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
                         Timer stringTimer;
                         stringTimer.start();
 #endif
-
-                        std::string w = dict.createString(word);
-                        matches.emplace_back(i - w.size(), w);
+                        matches.emplace_back(i - word.length, word.length);
 #ifdef PRINT_STATISTICS
                         stringCreateTime += stringTimer.get();
 #endif
@@ -137,7 +144,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     {
         if (m1.index < m2.index) return true;
         else if (m1.index > m2.index) return false;
-        else return m1.word.size() <= m2.word.size();
+        else return m1.length <= m2.length;
     });
 
 #ifdef PRINT_STATISTICS
@@ -149,13 +156,13 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     {
         query.result += "-1";
     }
-    else query.result += matches.at(0).word;
+    else loadWord(matches.at(0).index, matches.at(0).length, query.result, query.document);
 
     for (size_t i = 1; i < matches.size(); i++)
     {
         Match& match = matches.at(i);
         query.result += '|';
-        query.result += match.word;
+        loadWord(match.index, match.length, query.result, query.document);
     }
 
 #ifdef PRINT_STATISTICS
@@ -224,7 +231,7 @@ int main()
 
         if (op == 'A')
         {
-            ngrams.emplace_back(timestamp);
+            ngrams.emplace_back(timestamp, line.size() - 2);
             dict.createWord(line, 2, ngrams.at(ngrams.size() - 1).hashList);
             size_t index = ngrams.size() - 1;
             DictHash prefix = ngrams.at(index).hashList.at(0);
@@ -240,7 +247,7 @@ int main()
         }
         else if (op == 'D')
         {
-            Word word(0);
+            Word word(0, 0);
             dict.createWord(line, 2, word.hashList);
             DictHash prefix = word.hashList.at(0);
 
