@@ -180,7 +180,7 @@ private:
 
     size_t createState()
     {
-        this->states.push_back(new LinearNfaState<MapType>());
+        this->states.push_back(new HashNfaState<MapType>());
         return this->states.size() - 1;
     }
 };

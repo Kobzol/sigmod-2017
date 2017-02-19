@@ -5,7 +5,7 @@ class Query
 public:
     Query()
     {
-        this->result.reserve(5000);
+        this->result.reserve(1000);
     }
     Query(size_t timestamp): timestamp(timestamp)
     {

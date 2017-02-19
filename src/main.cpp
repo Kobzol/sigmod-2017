@@ -19,6 +19,8 @@ static std::unordered_map<DictHash, std::vector<int>> prefixMap;
 static Nfa<size_t> nfa;
 
 #ifdef PRINT_STATISTICS
+    static size_t ngram_word_count = 0;
+    static size_t ngram_word_length = 0;
     static std::atomic<int> calcCount{0};
     static std::atomic<int> sortCount{0};
     static std::atomic<int> writeStringCount{0};
@@ -28,8 +30,32 @@ static Nfa<size_t> nfa;
     static std::atomic<int> noActiveFound{0};
     static std::atomic<int> duplicateNgramFound{0};
     static std::atomic<int> noDuplicateFound{0};
-#endif
+    static Timer addTimer;
+    static Timer deleteTimer;
+    static Timer queryTimer;
+    static Timer batchTimer;
+    static Timer ioTimer;
+    static std::unordered_map<int, int> prefixCounter;
 
+void updateNgramStats(const std::string& line)
+{
+    std::string prefix;
+    for (size_t i = 0; i < line.size(); i++)
+    {
+        if (line[i] == ' ')
+        {
+            ngram_word_length += prefix.size();
+            ngram_word_count++;
+            prefix.clear();
+        }
+        else prefix += line[i];
+    }
+
+    ngram_word_count++;
+    ngram_word_length += prefix.size();
+}
+
+#endif
 
 std::vector<Word> load_init_data(std::istream& input)
 {
@@ -48,6 +74,9 @@ std::vector<Word> load_init_data(std::istream& input)
         {
             ngrams.emplace_back(0, line.size());
             dict.createWord(line, 0, ngrams[ngrams.size() - 1].hashList);
+#ifdef PRINT_STATISTICS
+            updateNgramStats(line);
+#endif
         }
     }
 
@@ -192,7 +221,7 @@ int main()
 
 #ifdef PRINT_STATISTICS
     int additions = 0, deletions = 0, query_count = 0, init_ngrams = 0;
-    size_t query_length = 0, ngram_length = 0, ngram_hashes_length = 0, document_word_count = 0;
+    size_t query_length = 0, ngram_length = 0, document_word_count = 0;
     size_t batch_count = 0, batch_size = 0, result_length = 0;
     size_t total_word_length = 0;
     Timer writeResultTimer;
@@ -208,9 +237,9 @@ int main()
         nfa.addWord(ngrams[i], i);
 
 #ifdef PRINT_STATISTICS
+        prefixCounter[prefix]++;
         init_ngrams++;
-        ngram_length += dict.createString(ngrams[i]).size();
-        ngram_hashes_length += ngrams[i].hashList.size();
+        ngram_length += ngrams[i].length;
 #endif
     }
 
@@ -225,12 +254,22 @@ int main()
     {
         timestamp++;
 
+#ifdef PRINT_STATISTICS
+        ioTimer.start();
+#endif
         std::string& line = queries[queryIndex].document;
         if (!std::getline(input, line) || line.size() == 0) break;
         char op = line[0];
 
+#ifdef PRINT_STATISTICS
+        ioTimer.add();
+#endif
+
         if (op == 'A')
         {
+#ifdef PRINT_STATISTICS
+            addTimer.start();
+#endif
             ngrams.emplace_back(timestamp, line.size() - 2);
             dict.createWord(line, 2, ngrams[ngrams.size() - 1].hashList);
             size_t index = ngrams.size() - 1;
@@ -240,13 +279,18 @@ int main()
             nfa.addWord(ngrams[index], index);
 
 #ifdef PRINT_STATISTICS
-        additions++;
-        ngram_length += line.size();
-        ngram_hashes_length += ngrams[index].hashList.size();
+            prefixCounter[prefix]++;
+            addTimer.add();
+            additions++;
+            ngram_length += line.size();
+            updateNgramStats(line.substr(2));
 #endif
         }
         else if (op == 'D')
         {
+#ifdef PRINT_STATISTICS
+            deleteTimer.start();
+#endif
             Word word(0, 0);
             dict.createWord(line, 2, word.hashList);
             DictHash prefix = word.hashList[0];
@@ -265,11 +309,15 @@ int main()
             }
 
 #ifdef PRINT_STATISTICS
+            deleteTimer.add();
             deletions++;
 #endif
         }
         else if (op == 'Q')
         {
+#ifdef PRINT_STATISTICS
+            queryTimer.start();
+#endif
             queries[queryIndex].timestamp = timestamp;
             queries[queryIndex].result.clear();
             queryIndex++;
@@ -280,6 +328,7 @@ int main()
             }
 
 #ifdef PRINT_STATISTICS
+            queryTimer.add();
             query_count++;
             query_length += line.size();
 
@@ -297,11 +346,12 @@ int main()
         else
         {
 #ifdef PRINT_STATISTICS
+            batchTimer.start();
             batch_count++;
-            batch_size += queries.size();
+            batch_size += queryIndex;
 #endif
             // do queries in parallel
-            #pragma omp parallel for schedule(dynamic)
+            //#pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queryIndex; i++)
             {
                 find_in_document(queries[i], ngrams);
@@ -319,6 +369,7 @@ int main()
                 std::cout << queries[i].result << std::endl;
             }
 #ifdef PRINT_STATISTICS
+            batchTimer.add();
             writeResultTimer.add();
 #endif
             queryIndex = 0;
@@ -328,17 +379,36 @@ int main()
     }
 
 #ifdef PRINT_STATISTICS
-    std::cerr << "Initial ngrams: " << init_ngrams << std::endl;
+    std::vector<std::tuple<int, int>> prefixes;
+    size_t prefix_count = 0;
+    for (auto& kv : prefixCounter)
+    {
+        prefixes.push_back(std::tuple<int, int>(kv.first, kv.second));
+        prefix_count += kv.second;
+    }
+
+    std::sort(prefixes.begin(), prefixes.end(), [](std::tuple<int, int>& p1, std::tuple<int, int>& p2) {
+        return std::get<1>(p1) >= std::get<1>(p2);
+    });
+
+    for (int i = 0; i < 8; i++)
+    {
+        std::cerr << "Prefix: " << std::get<0>(prefixes[i]) << ", count: " << std::get<1>(prefixes[i]) << std::endl;
+    }
+
+    /*std::cerr << "Initial ngrams: " << init_ngrams << std::endl;
     std::cerr << "Additions: " << additions << std::endl;
     std::cerr << "Deletions: " << deletions << std::endl;
-    std::cerr << "Queries: " << query_count << std::endl;
+    std::cerr << "Queries: " << query_count << std::endl;*/
     std::cerr << "Average document length: " << query_length / (double) query_count << std::endl;
     std::cerr << "Average document word count: " << document_word_count / (double) query_count << std::endl;
     std::cerr << "Average document word length: " << total_word_length / document_word_count << std::endl;
     std::cerr << "Average ngram length: " << ngram_length / (double) ngrams.size() << std::endl;
-    std::cerr << "Average ngram word count: " << ngram_hashes_length / (double) ngrams.size() << std::endl;
+    std::cerr << "Average ngram word count: " << ngram_word_count / (double) ngrams.size() << std::endl;
+    std::cerr << "Average ngram word length: " << ngram_word_length / ngram_word_count << std::endl;
     std::cerr << "Average result length: " << result_length / (double) query_count << std::endl;
-    std::cerr << "Hash found: " << hashFound << std::endl;
+    std::cerr << "Average prefix ngram count: " << prefix_count / prefixCounter.size() << std::endl;
+    /*std::cerr << "Hash found: " << hashFound << std::endl;
     std::cerr << "Hash not found: " << hashNotFound << std::endl;
     std::cerr << "Inactive ngrams found: " << noActiveFound << std::endl;
     std::cerr << "Duplicate ngrams found: " << duplicateNgramFound << std::endl;
@@ -350,6 +420,11 @@ int main()
     std::cerr << "String recreate time: " << stringCreateTime << std::endl;
     std::cerr << "Create result time: " << writeStringCount << std::endl;
     std::cerr << "Write result time: " << writeResultTimer.total << std::endl;
+    std::cerr << "IO time: " << ioTimer.total << std::endl;
+    std::cerr << "Add time: " << addTimer.total << std::endl;
+    std::cerr << "Delete time: " << deleteTimer.total << std::endl;
+    std::cerr << "Query time: " << queryTimer.total << std::endl;
+    std::cerr << "Batch time: " << batchTimer.total << std::endl;*/
     std::cerr << std::endl;
 #endif
 
