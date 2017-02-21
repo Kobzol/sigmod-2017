@@ -360,7 +360,7 @@ int main()
             batch_size += queryIndex;
 #endif
             // do queries in parallel
-            //#pragma omp parallel for schedule(dynamic)
+            #pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queryIndex; i++)
             {
                 find_in_document(queries[i], ngrams);
