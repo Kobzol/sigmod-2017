@@ -14,7 +14,7 @@ public:
 
     inline bool operator==(const Word& other)
     {
-        return other.hashList == this->hashList;
+        return this->length == other.length && other.hashList == this->hashList;
     }
 
     inline void deactivate(size_t timestamp)

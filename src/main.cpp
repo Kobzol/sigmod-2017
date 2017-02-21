@@ -30,12 +30,15 @@ static Nfa<size_t> nfa;
     static std::atomic<int> noActiveFound{0};
     static std::atomic<int> duplicateNgramFound{0};
     static std::atomic<int> noDuplicateFound{0};
+    static std::atomic<int> nfaIterationCount{0};
+    static std::atomic<int> nfaStateCount{0};
     static Timer addTimer;
     static Timer deleteTimer;
     static Timer queryTimer;
     static Timer batchTimer;
     static Timer ioTimer;
     static std::unordered_map<int, int> prefixCounter;
+    static std::unordered_map<int, int> endPrefixCounter;
 
 void updateNgramStats(const std::string& line)
 {
@@ -119,6 +122,10 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
             if (__builtin_expect(hash != HASH_NOT_FOUND, false))    // TODO: check
             {
                 nfa.feedWord(visitor, hash, indices);
+#ifdef PRINT_STATISTICS
+                nfaIterationCount++;
+                nfaStateCount += visitor.states[visitor.stateIndex].size();
+#endif
                 for (ssize_t index : indices)
                 {
                     const Word& word = ngrams[index];
@@ -238,6 +245,7 @@ int main()
 
 #ifdef PRINT_STATISTICS
         prefixCounter[prefix]++;
+        endPrefixCounter[ngrams[i].hashList[ngrams[i].hashList.size() - 1]]++;
         init_ngrams++;
         ngram_length += ngrams[i].length;
 #endif
@@ -280,6 +288,7 @@ int main()
 
 #ifdef PRINT_STATISTICS
             prefixCounter[prefix]++;
+            endPrefixCounter[ngrams[index].hashList[ngrams[index].hashList.size() - 1]]++;
             addTimer.add();
             additions++;
             ngram_length += line.size();
@@ -381,7 +390,7 @@ int main()
 #ifdef PRINT_STATISTICS
     std::vector<std::tuple<int, int>> prefixes;
     size_t prefix_count = 0;
-    for (auto& kv : prefixCounter)
+    for (auto& kv : endPrefixCounter)
     {
         prefixes.push_back(std::tuple<int, int>(kv.first, kv.second));
         prefix_count += kv.second;
@@ -408,6 +417,7 @@ int main()
     std::cerr << "Average ngram word length: " << ngram_word_length / ngram_word_count << std::endl;
     std::cerr << "Average result length: " << result_length / (double) query_count << std::endl;
     std::cerr << "Average prefix ngram count: " << prefix_count / prefixCounter.size() << std::endl;
+    std::cerr << "Average NFA state count: " << nfaStateCount / (double) nfaIterationCount << std::endl;
     /*std::cerr << "Hash found: " << hashFound << std::endl;
     std::cerr << "Hash not found: " << hashNotFound << std::endl;
     std::cerr << "Inactive ngrams found: " << noActiveFound << std::endl;

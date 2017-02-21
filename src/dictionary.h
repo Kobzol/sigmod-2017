@@ -6,7 +6,6 @@
 #include <iostream>
 #include "word.h"
 #include "settings.h"
-//#include "sparsepp.h"
 
 
 class Dictionary
@@ -110,6 +109,6 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, DictHash> dictionary;
+    HashMap<std::string, DictHash> dictionary;
     //std::unordered_map<DictHash, std::string> backMapping;
 };
