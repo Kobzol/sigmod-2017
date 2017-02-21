@@ -300,7 +300,7 @@ int main()
 #ifdef PRINT_STATISTICS
             deleteTimer.start();
 #endif
-            Word word(0, 0);
+            Word word(0, (int) line.size() - 2);
             dict.createWord(line, 2, word.hashList);
             DictHash prefix = word.hashList[0];
 
