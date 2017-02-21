@@ -405,6 +405,12 @@ int main()
         std::cerr << "Prefix: " << std::get<0>(prefixes[i]) << ", count: " << std::get<1>(prefixes[i]) << std::endl;
     }
 
+    size_t nfaEdgeCount = 0;
+    for (auto& state : nfa.states)
+    {
+        nfaEdgeCount += state.get_size();
+    }
+
     /*std::cerr << "Initial ngrams: " << init_ngrams << std::endl;
     std::cerr << "Additions: " << additions << std::endl;
     std::cerr << "Deletions: " << deletions << std::endl;
@@ -417,7 +423,9 @@ int main()
     std::cerr << "Average ngram word length: " << ngram_word_length / ngram_word_count << std::endl;
     std::cerr << "Average result length: " << result_length / (double) query_count << std::endl;
     std::cerr << "Average prefix ngram count: " << prefix_count / prefixCounter.size() << std::endl;
-    std::cerr << "Average NFA state count: " << nfaStateCount / (double) nfaIterationCount << std::endl;
+    std::cerr << "Average NFA visitor state count: " << nfaStateCount / (double) nfaIterationCount << std::endl;
+    std::cerr << "NFA root state edge count: " << nfa.rootState.get_size() << std::endl;
+    std::cerr << "Average NFA state edge count: " << nfaEdgeCount / (double) (nfa.states.size() - 1) << std::endl;
     /*std::cerr << "Hash found: " << hashFound << std::endl;
     std::cerr << "Hash not found: " << hashNotFound << std::endl;
     std::cerr << "Inactive ngrams found: " << noActiveFound << std::endl;

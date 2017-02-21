@@ -11,7 +11,7 @@
 using DictHash = unsigned int;
 #define HASH_NOT_FOUND ((DictHash) -1)
 
-#define THREAD_COUNT (40)
+#define THREAD_COUNT (8)
 
 #ifdef REAL_RUN
     #ifndef THREAD_COUNT
@@ -25,4 +25,4 @@ using DictHash = unsigned int;
 template <typename K, typename V>
 using HashMap = std::unordered_map<K, V>; //spp::sparse_hash_map<K, V>;
 
-#define MAX_LINEAR_STATE_SIZE (50)
+#define MAX_LINEAR_MAP_SIZE (50)

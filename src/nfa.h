@@ -75,7 +75,19 @@ public:
     void add_arc(const MapType& input, size_t index)
     {
         linearMap[input] = index;
+#ifdef PRINT_STATISTICS
+        this->size++;
+#endif
     }
+
+#ifdef PRINT_STATISTICS
+    size_t get_size() const
+    {
+        return this->size;
+    }
+
+    size_t size = 0;
+#endif
 
     ssize_t wordIndex = NOT_FINAL_STATE;
 };
@@ -122,18 +134,55 @@ template <typename MapType>
 class CombinedNfaState
 {
 public:
-    ssize_t get_arc(const MapType& input) const
+    CombinedNfaState(): get_fn(&CombinedNfaState<MapType>::get_arc_linear),
+                        add_fn(&CombinedNfaState<MapType>::add_arc_linear)
     {
-        return this->linearMap.get_arc(input);
+
     }
 
-    void add_arc(const MapType& input, size_t index)
+    ssize_t get_arc_linear(const MapType& input) const
     {
-        return this->linearMap.add_arc(input, index);
+        return this->map.get_arc(input);
     }
 
-    LinearNfaState<MapType> linearMap;
-    //HashNfaState<MapType> hashMap;
+    void add_arc_linear(const MapType& input, size_t index)
+    {
+        this->map.add_arc(input, index);
+
+        if (this->map.get_size() > MAX_LINEAR_MAP_SIZE)
+        {
+            int size = (int) this->map.keys.size();
+            for (int i = 0; i < size; i++)
+            {
+                this->hashMap.add_arc(this->map.keys[i], this->map.indices[i]);
+            }
+
+            this->get_fn = &CombinedNfaState<MapType>::get_arc_hash;
+            this->add_fn = &CombinedNfaState<MapType>::add_arc_hash;
+        }
+    }
+
+    ssize_t get_arc_hash(const MapType& input) const
+    {
+        return this->hashMap.get_arc(input);
+    }
+
+    void add_arc_hash(const MapType& input, size_t index)
+    {
+        this->hashMap.add_arc(input, index);
+    }
+
+    size_t get_size() const
+    {
+        return this->map.get_size();
+    }
+
+    LinearNfaState<MapType> map;
+    HashNfaState<MapType> hashMap;
+
+    ssize_t (CombinedNfaState<MapType>::*get_fn)(const MapType& input) const;
+    void (CombinedNfaState<MapType>::*add_fn)(const MapType& input, size_t index);
+
     ssize_t wordIndex = NOT_FINAL_STATE;
 };
 
@@ -163,13 +212,13 @@ public:
         for (int i = 1; i < size; i++)
         {
             DictHash prefix = word.hashList[i];
-            arc = this->states[activeState].get_arc(prefix);
+            arc = (this->states[activeState].*(this->states[activeState].get_fn))(prefix);
 
             if (arc == NO_ARC)
             {
                 size_t stateId = this->createState();
                 CombinedNfaState<MapType>& state = this->states[activeState];
-                state.add_arc(prefix, stateId);
+                (state.*(state.add_fn))(prefix, stateId);
                 activeState = stateId;
             }
             else activeState = arc;
@@ -199,7 +248,7 @@ public:
         for (ssize_t stateId : visitor.states[currentStateIndex])
         {
             CombinedNfaState<MapType>& state = this->states[stateId];
-            ssize_t nextStateId = state.get_arc(input);
+            ssize_t nextStateId = (state.*(state.get_fn))(input);
             if (nextStateId != NO_ARC)
             {
                 visitor.states[nextStateIndex].push_back(nextStateId);
@@ -215,7 +264,6 @@ public:
         visitor.stateIndex = nextStateIndex;
     }
 
-private:
     LinearMapNfaState<MapType> rootState;
     std::vector<CombinedNfaState<MapType>> states;
 
