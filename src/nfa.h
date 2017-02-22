@@ -106,9 +106,9 @@ public:
         int size = (int) this->keys.size();
         for (int i = 0; i < size; i++)
         {
-            if (this->keys[i] == input)
+            if (this->keys[i].first == input)
             {
-                return this->indices[i];
+                return this->keys[i].second;
             }
         }
 
@@ -117,8 +117,7 @@ public:
 
     void add_arc(const MapType& input, size_t index)
     {
-        this->keys.emplace_back(input);
-        this->indices.emplace_back(index);
+        this->keys.emplace_back(input, index);
     }
 
     size_t get_size() const
@@ -126,8 +125,7 @@ public:
         return this->keys.size();
     }
 
-    std::vector<MapType> keys;
-    std::vector<size_t> indices;
+    std::vector<std::pair<MapType, unsigned int>> keys;
 };
 
 template <typename MapType>
@@ -154,7 +152,7 @@ public:
             int size = (int) this->map.keys.size();
             for (int i = 0; i < size; i++)
             {
-                this->hashMap.add_arc(this->map.keys[i], this->map.indices[i]);
+                this->hashMap.add_arc(this->map.keys[i].first, this->map.keys[i].second);
             }
 
             this->get_fn = &CombinedNfaState<MapType>::get_arc_hash;

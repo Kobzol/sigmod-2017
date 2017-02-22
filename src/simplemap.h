@@ -57,14 +57,14 @@ public:
 
     void insert(const Key& key, Value value)
     {
-        size_t hash = this->hash_fn(key) & (this->capacity - 1);
+        size_t hash = hashfn(key) & (this->capacity - 1);
 
         this->nodes[hash].emplace_back(key, value);
         this->count++;
     }
     Value get(const Key& key) const
     {
-        size_t hash = this->hash_fn(key) & (this->capacity - 1);
+        size_t hash = hashfn(key) & (this->capacity - 1);
 
         std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
         SimpleMapNode<Key, Value>* start = node.data();

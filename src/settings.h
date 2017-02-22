@@ -11,7 +11,7 @@
 using DictHash = unsigned int;
 #define HASH_NOT_FOUND ((DictHash) -1)
 
-#define THREAD_COUNT (6)
+#define THREAD_COUNT (8)
 
 #ifdef REAL_RUN
     #ifndef THREAD_COUNT
