@@ -100,7 +100,7 @@ std::vector<Word>* load_init_data(std::istream& input)
 
 void hash_document(Query& query)
 {
-    std::string& line = query.document;
+    /*std::string& line = query.document;
 
     int size = (int) line.size();
     std::string prefix;
@@ -127,7 +127,7 @@ void hash_document(Query& query)
         else prefix += c;
     }
 
-    query.wordHashes.emplace_back(i, dict->map.get(prefix));
+    query.wordHashes.emplace_back(i, dict->map.get(prefix));*/
 }
 
 void loadWord(int from, int length, std::string& target, const std::string& source)
@@ -154,59 +154,80 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
 #endif
 
     std::vector<ssize_t> indices;
-    int size = (int) query.wordHashes.size();
-    for (int i = 0; i < size; i++)
+    int size = (int) query.document.size();
+    std::string& line = query.document;
+    std::string prefix;
+    int i = 2;
+    for (; i < size; i++)
     {
-        DictHash hash = query.wordHashes[i].hash;
-        if (__builtin_expect(hash != HASH_NOT_FOUND, true))    // TODO: check
+        char c = line[i];
+        if (__builtin_expect(c == ' ', false))
         {
-#ifdef PRINT_STATISTICS
-            feedTimer.start();
-#endif
-            nfa->feedWord(visitor, hash, indices);
-#ifdef PRINT_STATISTICS
-            feedTimer.add();
-            nfaIterationCount++;
-            nfaStateCount += visitor.states[visitor.stateIndex].size();
-#endif
-            for (ssize_t index : indices)
+            DictHash hash = dict->map.get(prefix);
+            if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
-                const Word& word = ngrams[index];
+                nfa->feedWord(visitor, hash, indices);
 #ifdef PRINT_STATISTICS
-                if (!word.is_active(timestamp))
-                {
-                    noActiveFound++;
-                }
-                if (found.find(index) != found.end())
-                {
-                    duplicateNgramFound++;
-                }
-                else noDuplicateFound++;
+                nfaIterationCount++;
+                nfaStateCount += visitor.states[visitor.stateIndex].size();
 #endif
-                if (word.is_active(timestamp) && found.find(index) == found.end())
+                for (ssize_t index : indices)
                 {
-                    found.insert(index);
+                    const Word& word = ngrams[index];
 #ifdef PRINT_STATISTICS
-                    Timer stringTimer;
-                    stringTimer.start();
+                    if (!word.is_active(timestamp))
+                    {
+                        noActiveFound++;
+                    }
+                    if (found.find(index) != found.end())
+                    {
+                        duplicateNgramFound++;
+                    }
+                    else noDuplicateFound++;
 #endif
-                    matches.emplace_back(query.wordHashes[i].index - word.length, word.length);
+                    if (word.is_active(timestamp) && found.find(index) == found.end())
+                    {
+                        found.insert(index);
 #ifdef PRINT_STATISTICS
-                    stringCreateTime += stringTimer.get();
+                        Timer stringTimer;
+                        stringTimer.start();
 #endif
+                        matches.emplace_back(i - word.length, word.length);
+#ifdef PRINT_STATISTICS
+                        stringCreateTime += stringTimer.get();
+#endif
+                    }
                 }
+                indices.clear();
+#ifdef PRINT_STATISTICS
+                hashFound++;
+#endif
             }
-            indices.clear();
+            else
+            {
+                visitor.states[visitor.stateIndex].clear();
 #ifdef PRINT_STATISTICS
-            hashFound++;
+                hashNotFound++;
 #endif
+            }
+
+            prefix.clear();
         }
-        else
+        else prefix += c;
+    }
+
+    DictHash hash = dict->map.get(prefix);
+    if (hash != HASH_NOT_FOUND)
+    {
+        nfa->feedWord(visitor, hash, indices);
+        for (ssize_t index : indices)
         {
-            visitor.states[visitor.stateIndex].clear();
-#ifdef PRINT_STATISTICS
-            hashNotFound++;
-#endif
+            const Word& word = ngrams[index];
+            if (word.is_active(timestamp) && found.find(index) == found.end())
+            {
+                found.insert(index);
+                matches.emplace_back(i - word.length, word.length);
+            }
         }
     }
 
@@ -285,11 +306,11 @@ void batch(size_t& queryIndex)
     prehashTimer.start();
 #endif
     // hash queries in parallel
-    #pragma omp parallel for schedule(dynamic)
+    /*#pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < queryIndex; i++)
     {
         hash_document((*queries)[i]);
-    }
+    }*/
 
 #ifdef PRINT_STATISTICS
     prehashTimer.add();
