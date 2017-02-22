@@ -65,6 +65,7 @@ void updateNgramStats(const std::string& line)
 #endif
 
 #ifdef USE_CHAR_CACHE
+#define CHAR_CACHE_CHAR_COUNT ((size_t) 3)
 #define CHAR_CACHE_SIZE (256 * 256 * 256)
 
 bool* charCache;
@@ -78,27 +79,20 @@ void initCharCache()
 }
 unsigned int getCharCacheIndex(const std::string& word, size_t startIndex = 0)
 {
-    unsigned int c1 = (unsigned char) word[startIndex];
-    unsigned int c2 = (unsigned char) (word.size() > (startIndex + 1) ? word[startIndex + 1] : (unsigned char) ' ');
-    unsigned int c3 = (unsigned char) (word.size() > (startIndex + 2) ? word[startIndex + 2] : (unsigned char) ' ');
+    size_t size = std::min(CHAR_CACHE_CHAR_COUNT, word.size() - startIndex);
+    size_t i = 0;
+    for (; i < size; i++)
+    {
+        if (word[startIndex + i] == ' ') break;
+    }
 
-    return (c1 << 16) | (c2 << 8) | c3;
+    if (i == 1) return (unsigned char) word[startIndex];
+    if (i == 2) return *(reinterpret_cast<const unsigned short*>((void*) &(word[startIndex])));
+    return *(reinterpret_cast<const unsigned int*>((void*) &(word[startIndex]))) & (0x00FFFFFF);
 }
 void addToCharCache(const std::string& word, int startIndex = 0)
 {
-    int size = (int) word.size();
-    for (int i = startIndex; i < size; i++)
-    {
-        if (i == startIndex)
-        {
-            charCache[getCharCacheIndex(word, (size_t) i)] = true;
-        }
-        if (word[i] == ' ')
-        {
-            charCache[getCharCacheIndex(word, (size_t) i + 1)] = true;
-            i++;
-        }
-    }
+    charCache[getCharCacheIndex(word, (size_t) startIndex)] = true;
 }
 #endif
 
@@ -163,19 +157,18 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     for (int i = 2; i < size; i++)
     {
         char c = line[i];
-        if (__builtin_expect(c == ' ', true))
+        if (__builtin_expect(c == ' ', false))
         {
 #ifdef USE_CHAR_CACHE
     #ifdef PRINT_STATISTICS
                 readCharCacheTimer.start();
     #endif
-                if (!charCache[getCharCacheIndex(prefix)])
+                if (visitor.states[visitor.stateIndex].size() == 0 && !charCache[getCharCacheIndex(prefix)])
                 {
     #ifdef PRINT_STATISTICS
                     charCacheHit++;
                     readCharCacheTimer.add();
     #endif
-                    visitor.states[visitor.stateIndex].clear();
                     prefix.clear();
                     continue;
                 }
@@ -187,7 +180,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
 #endif
 
             DictHash hash = dict.get_hash_maybe(prefix);
-            if (__builtin_expect(hash != HASH_NOT_FOUND, false))    // TODO: check
+            if (__builtin_expect(hash != HASH_NOT_FOUND, true))    // TODO: check
             {
                 nfa.feedWord(visitor, hash, indices);
 #ifdef PRINT_STATISTICS
@@ -504,7 +497,7 @@ int main()
     /*std::cerr << "Initial ngrams: " << init_ngrams << std::endl;
     std::cerr << "Additions: " << additions << std::endl;
     std::cerr << "Deletions: " << deletions << std::endl;
-    std::cerr << "Queries: " << query_count << std::endl;*/
+    std::cerr << "Queries: " << query_count << std::endl;
     std::cerr << "Average document length: " << query_length / (double) query_count << std::endl;
     std::cerr << "Average document word count: " << document_word_count / (double) query_count << std::endl;
     std::cerr << "Average document word length: " << total_word_length / document_word_count << std::endl;
@@ -515,7 +508,7 @@ int main()
     std::cerr << "Average prefix ngram count: " << prefix_count / prefixCounter.size() << std::endl;
     std::cerr << "Average NFA visitor state count: " << nfaStateCount / (double) nfaIterationCount << std::endl;
     std::cerr << "NFA root state edge count: " << nfa.rootState.get_size() << std::endl;
-    std::cerr << "Average NFA state edge count: " << nfaEdgeCount / (double) (nfa.states.size() - 1) << std::endl;
+    std::cerr << "Average NFA state edge count: " << nfaEdgeCount / (double) (nfa.states.size() - 1) << std::endl;*/
 #ifdef USE_CHAR_CACHE
     std::cerr << "Write to char cache: " << addCharCacheTimer.total << std::endl;
     std::cerr << "Read char cache: " << readCharCache << std::endl;
@@ -523,7 +516,7 @@ int main()
     std::cerr << "Char cache hit: " << charCacheHit << std::endl;
     std::cerr << "Char cache miss: " << charCacheMiss << std::endl;
 #endif
-    /*std::cerr << "Hash found: " << hashFound << std::endl;
+    std::cerr << "Hash found: " << hashFound << std::endl;
     std::cerr << "Hash not found: " << hashNotFound << std::endl;
     std::cerr << "Inactive ngrams found: " << noActiveFound << std::endl;
     std::cerr << "Duplicate ngrams found: " << duplicateNgramFound << std::endl;
@@ -534,7 +527,7 @@ int main()
     std::cerr << "Sort time: " << sortCount << std::endl;
     std::cerr << "String recreate time: " << stringCreateTime << std::endl;
     std::cerr << "Create result time: " << writeStringCount << std::endl;
-    std::cerr << "Write result time: " << writeResultTimer.total << std::endl;*/
+    std::cerr << "Write result time: " << writeResultTimer.total << std::endl;
     std::cerr << "IO time: " << ioTimer.total << std::endl;
     std::cerr << "Add time: " << addTimer.total << std::endl;
     std::cerr << "Delete time: " << deleteTimer.total << std::endl;

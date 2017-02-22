@@ -20,11 +20,11 @@ using DictHash = unsigned int;
 #endif
 
 //#include "sparsepp.h"
-#include "hopscotch_map.h"
-//#include <unordered_map>
+//#include "hopscotch_map.h"
+#include <unordered_map>
 
 template <typename K, typename V>
-using HashMap = tsl::hopscotch_map<K, V>; //spp::sparse_hash_map<K, V>;
+using HashMap = std::unordered_map<K, V>; //spp::sparse_hash_map<K, V>;
 
 #define MAX_LINEAR_MAP_SIZE (50)
 
