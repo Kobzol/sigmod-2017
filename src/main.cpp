@@ -61,9 +61,7 @@ void updateNgramStats(const std::string& line)
     ngram_word_count++;
     ngram_word_length += prefix.size();
 }
-
 #endif
-
 
 std::vector<Word> load_init_data(std::istream& input)
 {
@@ -82,9 +80,6 @@ std::vector<Word> load_init_data(std::istream& input)
         {
             ngrams.emplace_back(0, line.size());
             dict.createWord(line, 0, ngrams[ngrams.size() - 1].hashList);
-#ifdef USE_CHAR_CACHE
-            addToCharCache(line);
-#endif
 #ifdef PRINT_STATISTICS
             updateNgramStats(line);
 #endif
@@ -92,6 +87,38 @@ std::vector<Word> load_init_data(std::istream& input)
     }
 
     return ngrams;
+}
+
+void hash_document(Query& query)
+{
+    std::string& line = query.document;
+
+    int size = (int) line.size();
+    std::string prefix;
+    bool skip = false;
+    int i = 2;
+    for (; i < size; i++)
+    {
+        char c = line[i];
+        if (c == ' ')
+        {
+            DictHash hash = dict.map.get(prefix);
+            if (hash != HASH_NOT_FOUND)
+            {
+                query.wordHashes.emplace_back(i, hash);
+                skip = false;
+            }
+            else if (!skip)
+            {
+                skip = true;
+                query.wordHashes.emplace_back(i, HASH_NOT_FOUND);
+            }
+            prefix.clear();
+        }
+        else prefix += c;
+    }
+
+    query.wordHashes.emplace_back(i, dict.map.get(prefix));
 }
 
 void loadWord(int from, int length, std::string& target, const std::string& source)
@@ -108,7 +135,6 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     std::vector<Match> matches;
     std::unordered_set<ssize_t> found;
     size_t timestamp = query.timestamp;
-    std::string& line = query.document;
 
     NfaVisitor visitor;
 
@@ -118,80 +144,56 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     Timer readCharCacheTimer;
 #endif
 
-    std::string prefix;
     std::vector<ssize_t> indices;
-    int size = (int) line.size();
-    int i = 2;
-    for (; i < size; i++)
+    int size = (int) query.wordHashes.size();
+    for (int i = 0; i < size; i++)
     {
-        char c = line[i];
-        if (__builtin_expect(c == ' ', false))
+        DictHash hash = query.wordHashes[i].hash;
+        if (__builtin_expect(hash != HASH_NOT_FOUND, true))    // TODO: check
         {
-            DictHash hash = dict.map.get(prefix);
-            if (__builtin_expect(hash != HASH_NOT_FOUND, true))
-            {
-                nfa.feedWord(visitor, hash, indices);
+            nfa.feedWord(visitor, hash, indices);
 #ifdef PRINT_STATISTICS
-                nfaIterationCount++;
-                nfaStateCount += visitor.states[visitor.stateIndex].size();
+            nfaIterationCount++;
+            nfaStateCount += visitor.states[visitor.stateIndex].size();
 #endif
-                for (ssize_t index : indices)
+            for (ssize_t index : indices)
+            {
+                const Word& word = ngrams[index];
+#ifdef PRINT_STATISTICS
+                if (!word.is_active(timestamp))
                 {
-                    const Word& word = ngrams[index];
-#ifdef PRINT_STATISTICS
-                    if (!word.is_active(timestamp))
-                    {
-                        noActiveFound++;
-                    }
-                    if (found.find(index) != found.end())
-                    {
-                        duplicateNgramFound++;
-                    }
-                    else noDuplicateFound++;
-#endif
-                    if (word.is_active(timestamp) && found.find(index) == found.end())
-                    {
-                        found.insert(index);
-#ifdef PRINT_STATISTICS
-                        Timer stringTimer;
-                        stringTimer.start();
-#endif
-                        matches.emplace_back(i - word.length, word.length);
-#ifdef PRINT_STATISTICS
-                        stringCreateTime += stringTimer.get();
-#endif
-                    }
+                    noActiveFound++;
                 }
-                indices.clear();
-#ifdef PRINT_STATISTICS
-                hashFound++;
+                if (found.find(index) != found.end())
+                {
+                    duplicateNgramFound++;
+                }
+                else noDuplicateFound++;
 #endif
-            }
-            else
-            {
-                visitor.states[visitor.stateIndex].clear();
+                if (word.is_active(timestamp) && found.find(index) == found.end())
+                {
+                    found.insert(index);
 #ifdef PRINT_STATISTICS
-                hashNotFound++;
+                    Timer stringTimer;
+                    stringTimer.start();
 #endif
+                    matches.emplace_back(query.wordHashes[i].index - word.length, word.length);
+#ifdef PRINT_STATISTICS
+                    stringCreateTime += stringTimer.get();
+#endif
+                }
             }
-
-            prefix.clear();
+            indices.clear();
+#ifdef PRINT_STATISTICS
+            hashFound++;
+#endif
         }
-        else prefix += c;
-    }
-
-    DictHash hash = dict.map.get(prefix);
-    if (hash != HASH_NOT_FOUND)
-    {
-        nfa.feedWord(visitor, hash, indices);
-        for (ssize_t index : indices)
+        else
         {
-            const Word& word = ngrams[index];
-            if (word.is_active(timestamp) && found.find(index) == found.end())
-            {
-                found.insert(index);
-                matches.emplace_back(i - word.length, word.length);
-            }
+            visitor.states[visitor.stateIndex].clear();
+#ifdef PRINT_STATISTICS
+            hashNotFound++;
+#endif
         }
     }
 
@@ -362,8 +364,7 @@ int main()
 #ifdef PRINT_STATISTICS
             queryTimer.start();
 #endif
-            queries[queryIndex].timestamp = timestamp;
-            queries[queryIndex].result.clear();
+            queries[queryIndex].reset(timestamp);
             queryIndex++;
 
             if (queryIndex >= queries.size())
@@ -394,6 +395,13 @@ int main()
             batch_count++;
             batch_size += queryIndex;
 #endif
+            // hash queries in parallel
+            #pragma omp parallel for schedule(dynamic)
+            for (size_t i = 0; i < queryIndex; i++)
+            {
+                hash_document(queries[i]);
+            }
+
             // do queries in parallel
             #pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queryIndex; i++)

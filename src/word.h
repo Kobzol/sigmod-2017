@@ -35,11 +35,11 @@ public:
 class Match
 {
 public:
-    Match(int index, int length): index(index), length(length)
+    Match(unsigned int index, unsigned int length): index(index), length(length)
     {
 
     }
 
-    int index;
-    int length;
+    unsigned int index;
+    unsigned int length;
 };
