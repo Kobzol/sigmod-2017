@@ -42,7 +42,10 @@ static std::vector<Query>* queries;
     static Timer ioTimer;
     static Timer prehashTimer;
     static Timer computeTimer;
-    static std::atomic<int> feedTime{0};
+    static double feedTime{0};
+    static double addCreateWord{0};
+    static double addWordMap{0};
+    static double addNfaAdd{0};
     static std::unordered_map<int, int> prefixCounter;
     static std::unordered_map<int, int> endPrefixCounter;
 
@@ -281,11 +284,28 @@ void delete_ngram(std::string& line, size_t timestamp)
 }
 void add_ngram(const std::string& line, size_t timestamp)
 {
+#ifdef PRINT_STATISTICS
+    Timer addTimer;
+#endif
     (*ngrams).emplace_back(timestamp, line.size() - 2);
+#ifdef PRINT_STATISTICS
+    addTimer.start();
+#endif
     dict->createWord(line, 2, (*ngrams)[(*ngrams).size() - 1].hashList);
     size_t index = (*ngrams).size() - 1;
+#ifdef PRINT_STATISTICS
+    addCreateWord += addTimer.get();
+    addTimer.start();
+#endif
     (*wordMap).insert(line.substr(2), (DictHash) index);
+#ifdef PRINT_STATISTICS
+    addWordMap += addTimer.get();
+    addTimer.start();
+#endif
     nfa->addWord((*ngrams)[index], index);
+#ifdef PRINT_STATISTICS
+    addNfaAdd += addTimer.get();
+#endif
 }
 void query(size_t& queryIndex, size_t timestamp)
 {
@@ -396,17 +416,11 @@ int main()
 
 #ifdef PRINT_STATISTICS
     Timer runTimer;
-    Timer cycleTimer;
-    cycleTimer.start();
     runTimer.start();
 #endif
 
     while (true)
     {
-#ifdef PRINT_STATISTICS
-        cycleTimer.add();
-        cycleTimer.start();
-#endif
         timestamp++;
 
 #ifdef PRINT_STATISTICS
@@ -417,7 +431,6 @@ int main()
         {
 #ifdef PRINT_STATISTICS
             ioTimer.add();
-            cycleTimer.add();
 #endif
             break;
         }
@@ -544,14 +557,16 @@ int main()
     std::cerr << "Write result time: " << writeResultTimer.total << std::endl;
     std::cerr << "IO time: " << ioTimer.total << std::endl;
     std::cerr << "Add time: " << addTimer.total << std::endl;
+    std::cerr << "Add create word time: " << addCreateWord << std::endl;
+    std::cerr << "Add word map time: " << addWordMap << std::endl;
+    std::cerr << "Add nfa add time: " << addNfaAdd << std::endl;
     std::cerr << "Delete time: " << deleteTimer.total << std::endl;
     std::cerr << "Query time: " << queryTimer.total << std::endl;
     std::cerr << "Batch time: " << batchTimer.total << std::endl;
     std::cerr << "Prehash time: " << prehashTimer.total << std::endl;
     std::cerr << "Find time: " << computeTimer.total << std::endl;
     std::cerr << "Feed time: " << feedTime << std::endl;
-    std::cerr << "Run time: " << runTimer.get() << std::endl;
-    std::cerr << "Cycle time: " << cycleTimer.total << std::endl;
+    std::cerr << "Run time: " << runTimer.total << std::endl;
     std::cerr << std::endl;
 #endif
 

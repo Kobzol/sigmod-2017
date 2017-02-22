@@ -33,22 +33,20 @@ public:
 
     void createWord(const std::string& word, size_t start, std::vector<DictHash>& hashList)
     {
-        std::string prefix;
-        for (size_t i = start; i < word.size(); i++)
+        size_t size = word.size();
+        for (size_t i = start; i < size; i++)
         {
             char c = word[i];
             if (c == ' ')
             {
-                hashList.push_back(this->insert(prefix));
-                prefix.clear();
+                hashList.push_back(this->insert(this->prefix));
+                this->prefix.clear();
             }
-            else
-            {
-                prefix += c;
-            }
+            else this->prefix += c;
         }
 
-        hashList.push_back(this->insert(prefix));
+        hashList.push_back(this->insert(this->prefix));
+        this->prefix.clear();
     }
 
     size_t size()
@@ -56,5 +54,6 @@ public:
         return this->map.size();
     }
 
+    std::string prefix;
     SimpleMap<std::string, DictHash> map;
 };
