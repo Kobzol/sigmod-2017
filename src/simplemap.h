@@ -49,7 +49,7 @@ public:
     }
     ~SimpleMap()
     {
-        delete[] this->nodes;
+        //delete[] this->nodes;
     }
 
     SimpleMap(const SimpleMap&) = delete;
