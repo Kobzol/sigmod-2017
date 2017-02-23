@@ -194,7 +194,7 @@ public:
         this->createState();    // add root state
     }
 
-    void addWord(Word& word, size_t wordIndex)
+    /*void addWord(Word& word, size_t wordIndex)
     {
         ssize_t activeState;
         ssize_t arc = this->rootState.get_arc(word.hashList[0]);
@@ -223,7 +223,7 @@ public:
         }
 
         this->states[activeState].wordIndex = wordIndex;
-    }
+    }*/
 
     void feedWord(NfaVisitor& visitor, const MapType& input, std::vector<ssize_t>& results)
     {

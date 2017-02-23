@@ -12,11 +12,6 @@ public:
 
     }
 
-    inline bool operator==(const Word& other)
-    {
-        return this->length == other.length && other.hashList == this->hashList;
-    }
-
     inline void deactivate(size_t timestamp)
     {
         this->to = timestamp;
@@ -26,7 +21,6 @@ public:
         return this->from <= timestamp && timestamp < this->to;
     }
 
-    std::vector<DictHash> hashList;
     size_t from;
     size_t to;
     int length;

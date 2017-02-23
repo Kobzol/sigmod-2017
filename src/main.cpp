@@ -90,8 +90,9 @@ std::vector<Word>* load_init_data(std::istream& input)
         else
         {
             ngrams->emplace_back(0, line.size());
-            dict->createWord(line, 0, (*ngrams)[ngrams->size() - 1].hashList);
-            (*wordMap).insert(line, (DictHash)(ngrams->size() - 1));
+            size_t index = ngrams->size() - 1;
+            dict->createWordNfa(line, 0, *nfa, index);
+            (*wordMap).insert(line, (DictHash)(index));
 #ifdef PRINT_STATISTICS
             updateNgramStats(line);
 #endif
@@ -304,7 +305,7 @@ void add_ngram(const std::string& line, size_t timestamp)
 #endif
     //nfa->addWord((*ngrams)[index], index);
 
-    dict->createWordNfa<size_t>(line, 2, (*ngrams)[index].hashList, *nfa, index);
+    dict->createWordNfa<size_t>(line, 2, *nfa, index);
 #ifdef PRINT_STATISTICS
     addNfaAdd += addTimer.get();
 #endif
@@ -380,7 +381,7 @@ void init(std::istream& input)
 
     ngrams = load_init_data(input);
 
-    for (size_t i = 0; i < ngrams->size(); i++)
+    /*for (size_t i = 0; i < ngrams->size(); i++)
     {
         nfa->addWord((*ngrams)[i], i);
 
@@ -389,7 +390,7 @@ void init(std::istream& input)
         init_ngrams++;
         ngram_length += (*ngrams)[i].length;
 #endif
-    }
+    }*/
 }
 
 int main()

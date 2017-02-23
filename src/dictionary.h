@@ -50,7 +50,7 @@ public:
         this->prefix.clear();
     }
     template <typename MapType>
-    void createWordNfa(const std::string& word, size_t start, std::vector<DictHash>& hashList, Nfa<MapType>& nfa, size_t wordIndex)
+    void createWordNfa(const std::string& word, size_t start, Nfa<MapType>& nfa, size_t wordIndex)
     {
         ssize_t activeState = 0;
         ssize_t arc;
@@ -61,7 +61,6 @@ public:
             if (c == ' ')
             {
                 DictHash hash = this->insert(this->prefix);
-                hashList.push_back(hash);
                 this->nfaAddEdge(nfa, hash, activeState);
                 this->prefix.clear();
             }
@@ -69,7 +68,6 @@ public:
         }
 
         DictHash hash = this->insert(this->prefix);
-        hashList.push_back(hash);
         this->nfaAddEdge(nfa, hash, activeState);
 
         nfa.states[activeState].wordIndex = wordIndex;

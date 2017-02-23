@@ -36,4 +36,3 @@ using HashMap = std::unordered_map<K, V>; //spp::sparse_hash_map<K, V>;
 
 // TODO: wordMap no substr
 // TODO: overlay add with main thread
-// TODO: remove Word::hashList
