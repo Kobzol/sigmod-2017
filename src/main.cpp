@@ -291,8 +291,8 @@ void add_ngram(const std::string& line, size_t timestamp)
 #ifdef PRINT_STATISTICS
     addTimer.start();
 #endif
-    dict->createWord(line, 2, (*ngrams)[(*ngrams).size() - 1].hashList);
     size_t index = (*ngrams).size() - 1;
+    //dict->createWord(line, 2, (*ngrams)[index].hashList);
 #ifdef PRINT_STATISTICS
     addCreateWord += addTimer.get();
     addTimer.start();
@@ -302,7 +302,9 @@ void add_ngram(const std::string& line, size_t timestamp)
     addWordMap += addTimer.get();
     addTimer.start();
 #endif
-    nfa->addWord((*ngrams)[index], index);
+    //nfa->addWord((*ngrams)[index], index);
+
+    dict->createWordNfa<size_t>(line, 2, (*ngrams)[index].hashList, *nfa, index);
 #ifdef PRINT_STATISTICS
     addNfaAdd += addTimer.get();
 #endif
