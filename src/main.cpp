@@ -14,6 +14,7 @@
 #include "nfa.h"
 #include "timer.h"
 #include <omp.h>
+#include <fcntl.h>
 
 static Dictionary* dict;
 static SimpleMap<std::string, DictHash>* wordMap;
@@ -29,9 +30,6 @@ static std::vector<Query>* queries;
     static std::atomic<int> hashFound{0};
     static std::atomic<int> hashNotFound{0};
     static std::atomic<int> stringCreateTime{0};
-    static std::atomic<int> noActiveFound{0};
-    static std::atomic<int> duplicateNgramFound{0};
-    static std::atomic<int> noDuplicateFound{0};
     static std::atomic<int> nfaIterationCount{0};
     static std::atomic<int> nfaStateCount{0};
     static Timer addTimer;
@@ -44,11 +42,8 @@ static std::vector<Query>* queries;
     static double feedTime{0};
     static double addCreateWord{0};
     static double addWordMap{0};
-    static double addNfaAdd{0};
-    static std::unordered_map<int, int> prefixCounter;
-    static std::unordered_map<int, int> endPrefixCounter;
 
-    static int additions = 0, deletions = 0, query_count = 0, init_ngrams = 0;
+    static int additions = 0, deletions = 0, query_count = 0;
     static size_t query_length = 0, ngram_length = 0, document_word_count = 0;
     static size_t batch_count = 0, batch_size = 0, result_length = 0;
     static size_t total_word_length = 0;
@@ -171,15 +166,6 @@ void find_in_document(Query& query)
                 for (auto wordInfo : indices)
                 {
 #ifdef PRINT_STATISTICS
-                    if (!word.is_active(timestamp))
-                    {
-                        noActiveFound++;
-                    }
-                    if (found.find(index) != found.end())
-                    {
-                        duplicateNgramFound++;
-                    }
-                    else noDuplicateFound++;
 #endif
                     if (found.find(wordInfo.first) == found.end())
                     {
@@ -279,9 +265,6 @@ void add_ngram(const std::string& line, size_t timestamp)
 #ifdef PRINT_STATISTICS
     Timer addTimer;
 #endif
-#ifdef PRINT_STATISTICS
-    addTimer.start();
-#endif
     size_t index = dict->createWordNfa<size_t>(line, 2, *nfa, timestamp);
 #ifdef PRINT_STATISTICS
     addCreateWord += addTimer.get();
@@ -290,10 +273,6 @@ void add_ngram(const std::string& line, size_t timestamp)
     (*wordMap).insert(line, (DictHash) index);
 #ifdef PRINT_STATISTICS
     addWordMap += addTimer.get();
-    addTimer.start();
-#endif
-#ifdef PRINT_STATISTICS
-    addNfaAdd += addTimer.get();
 #endif
 }
 void query(size_t& queryIndex, size_t timestamp)
@@ -353,6 +332,44 @@ void batch(size_t& queryIndex)
 #endif
     queryIndex = 0;
 }
+
+/*#define IO_BUFFER_SIZE (1024 * 1024 * 16)
+static char* ioBuffer;
+static size_t ioStart = 0;
+static size_t ioIndex = 0;
+bool read_line(std::string& line)
+{
+    if (feof(stdin)) return false;
+    size_t sizeLeft = IO_BUFFER_SIZE - ioIndex;
+    ssize_t count = read(STDIN_FILENO, ioBuffer + ioIndex, sizeLeft);
+    if (count <= 0) return false;
+    ioIndex += count;
+
+    size_t i = ioStart;
+    while (i < ioIndex)
+    {
+        if (ioBuffer[i] == '\n')
+        {
+            line.resize(i - ioStart);
+            std::memcpy(const_cast<char*>(line.c_str()), ioBuffer + ioStart, line.size());
+            break;
+        }
+        i++;
+    }
+
+    ioStart = i + 1;
+
+    ioBuffer = new char[IO_BUFFER_SIZE];
+    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+
+    return true;
+}
+void clear_buffer()
+{
+    ioStart = 0;
+    ioIndex = 0;
+}*/
 
 void init(std::istream& input)
 {
@@ -537,7 +554,6 @@ int main()
     std::cerr << "Add time: " << addTimer.total << std::endl;
     std::cerr << "Add create word time: " << addCreateWord << std::endl;
     std::cerr << "Add word map time: " << addWordMap << std::endl;
-    std::cerr << "Add nfa add time: " << addNfaAdd << std::endl;
     std::cerr << "Delete time: " << deleteTimer.total << std::endl;
     std::cerr << "Query time: " << queryTimer.total << std::endl;
     std::cerr << "Batch time: " << batchTimer.total << std::endl;
