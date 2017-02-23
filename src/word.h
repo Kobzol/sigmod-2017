@@ -7,6 +7,10 @@
 class Word
 {
 public:
+    Word() : to(0)
+    {
+
+    }
     Word(size_t from, int length): from(from), to(UINT32_MAX), length(length)
     {
 

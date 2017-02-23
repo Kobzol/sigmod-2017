@@ -181,7 +181,7 @@ public:
     ssize_t (CombinedNfaState<MapType>::*get_fn)(const MapType& input) const;
     void (CombinedNfaState<MapType>::*add_fn)(const MapType& input, size_t index);
 
-    ssize_t wordIndex = NOT_FINAL_STATE;
+    Word word;
 };
 
 template <typename MapType>
@@ -225,7 +225,7 @@ public:
         this->states[activeState].wordIndex = wordIndex;
     }*/
 
-    void feedWord(NfaVisitor& visitor, const MapType& input, std::vector<ssize_t>& results)
+    void feedWord(NfaVisitor& visitor, const MapType& input, std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp)
     {
         size_t currentStateIndex = visitor.stateIndex;
         size_t nextStateIndex = 1 - currentStateIndex;
@@ -237,9 +237,9 @@ public:
         {
             visitor.states[nextStateIndex].push_back(arc);
             CombinedNfaState<MapType>& nextState = this->states[arc];
-            if (nextState.wordIndex != NOT_FINAL_STATE)
+            if (nextState.word.is_active(timestamp))
             {
-                results.push_back(nextState.wordIndex);
+                results.emplace_back(arc, nextState.word.length);
             }
         }
 
@@ -252,9 +252,9 @@ public:
                 visitor.states[nextStateIndex].push_back(nextStateId);
 
                 CombinedNfaState<MapType>& nextState = this->states[nextStateId];
-                if (nextState.wordIndex != NOT_FINAL_STATE)
+                if (nextState.word.is_active(timestamp))
                 {
-                    results.push_back(nextState.wordIndex);
+                    results.emplace_back(nextStateId, nextState.word.length);
                 }
             }
         }

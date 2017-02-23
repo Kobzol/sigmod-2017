@@ -18,7 +18,6 @@
 static Dictionary* dict;
 static SimpleMap<std::string, DictHash>* wordMap;
 static Nfa<size_t>* nfa;
-static std::vector<Word>* ngrams;
 static std::vector<Query>* queries;
 
 #ifdef PRINT_STATISTICS
@@ -74,10 +73,8 @@ void updateNgramStats(const std::string& line)
 }
 #endif
 
-std::vector<Word>* load_init_data(std::istream& input)
+void load_init_data(std::istream& input)
 {
-    std::vector<Word>* ngrams = new std::vector<Word>();
-
     while (true)
     {
         std::string line;
@@ -89,17 +86,13 @@ std::vector<Word>* load_init_data(std::istream& input)
         }
         else
         {
-            ngrams->emplace_back(0, line.size());
-            size_t index = ngrams->size() - 1;
-            dict->createWordNfa(line, 0, *nfa, index);
-            (*wordMap).insert(line, (DictHash)(index));
+            size_t index = dict->createWordNfa(line, 0, *nfa, 0);
+            (*wordMap).insert("A " + line, (DictHash)(index));
 #ifdef PRINT_STATISTICS
             updateNgramStats(line);
 #endif
         }
     }
-
-    return ngrams;
 }
 
 void hash_document(Query& query)
@@ -143,10 +136,10 @@ void loadWord(int from, int length, std::string& target, const std::string& sour
     }*/
     target += source.substr(from, length);
 }
-void find_in_document(Query& query, const std::vector<Word>& ngrams)
+void find_in_document(Query& query)
 {
     std::vector<Match> matches;
-    std::unordered_set<ssize_t> found;
+    std::unordered_set<unsigned int> found;
     size_t timestamp = query.timestamp;
 
     NfaVisitor visitor;
@@ -157,7 +150,7 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     Timer feedTimer;
 #endif
 
-    std::vector<ssize_t> indices;
+    std::vector<std::pair<unsigned int, unsigned int>> indices; // id, length
     int size = (int) query.document.size();
     std::string& line = query.document;
     std::string prefix;
@@ -170,14 +163,13 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
             DictHash hash = dict->map.get(prefix);
             if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
-                nfa->feedWord(visitor, hash, indices);
+                nfa->feedWord(visitor, hash, indices, timestamp);
 #ifdef PRINT_STATISTICS
                 nfaIterationCount++;
                 nfaStateCount += visitor.states[visitor.stateIndex].size();
 #endif
-                for (ssize_t index : indices)
+                for (auto wordInfo : indices)
                 {
-                    const Word& word = ngrams[index];
 #ifdef PRINT_STATISTICS
                     if (!word.is_active(timestamp))
                     {
@@ -189,14 +181,14 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
                     }
                     else noDuplicateFound++;
 #endif
-                    if (word.is_active(timestamp) && found.find(index) == found.end())
+                    if (found.find(wordInfo.first) == found.end())
                     {
-                        found.insert(index);
+                        found.insert(wordInfo.first);
 #ifdef PRINT_STATISTICS
                         Timer stringTimer;
                         stringTimer.start();
 #endif
-                        matches.emplace_back(i - word.length, word.length);
+                        matches.emplace_back(i - wordInfo.second, wordInfo.second);
 #ifdef PRINT_STATISTICS
                         stringCreateTime += stringTimer.get();
 #endif
@@ -223,14 +215,12 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
     DictHash hash = dict->map.get(prefix);
     if (hash != HASH_NOT_FOUND)
     {
-        nfa->feedWord(visitor, hash, indices);
-        for (ssize_t index : indices)
+        nfa->feedWord(visitor, hash, indices, timestamp);
+        for (auto wordInfo : indices)
         {
-            const Word& word = ngrams[index];
-            if (word.is_active(timestamp) && found.find(index) == found.end())
+            if (found.find(wordInfo.first) == found.end())
             {
-                found.insert(index);
-                matches.emplace_back(i - word.length, word.length);
+                matches.emplace_back(i - wordInfo.second, wordInfo.second);
             }
         }
     }
@@ -273,10 +263,11 @@ void find_in_document(Query& query, const std::vector<Word>& ngrams)
 
 void delete_ngram(std::string& line, size_t timestamp)
 {
-    DictHash index = wordMap->get(line.substr(2));
+    line[0] = 'A';
+    DictHash index = wordMap->get(line);
     if (index != HASH_NOT_FOUND)
     {
-        Word& ngram = (*ngrams)[index];
+        Word& ngram = nfa->states[index].word;
         if (ngram.is_active(timestamp))
         {
             ngram.deactivate(timestamp);
@@ -288,24 +279,19 @@ void add_ngram(const std::string& line, size_t timestamp)
 #ifdef PRINT_STATISTICS
     Timer addTimer;
 #endif
-    (*ngrams).emplace_back(timestamp, line.size() - 2);
 #ifdef PRINT_STATISTICS
     addTimer.start();
 #endif
-    size_t index = (*ngrams).size() - 1;
-    //dict->createWord(line, 2, (*ngrams)[index].hashList);
+    size_t index = dict->createWordNfa<size_t>(line, 2, *nfa, timestamp);
 #ifdef PRINT_STATISTICS
     addCreateWord += addTimer.get();
     addTimer.start();
 #endif
-    (*wordMap).insert(line.substr(2), (DictHash) index);
+    (*wordMap).insert(line, (DictHash) index);
 #ifdef PRINT_STATISTICS
     addWordMap += addTimer.get();
     addTimer.start();
 #endif
-    //nfa->addWord((*ngrams)[index], index);
-
-    dict->createWordNfa<size_t>(line, 2, *nfa, index);
 #ifdef PRINT_STATISTICS
     addNfaAdd += addTimer.get();
 #endif
@@ -343,7 +329,7 @@ void batch(size_t& queryIndex)
     #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < queryIndex; i++)
     {
-        find_in_document((*queries)[i], *ngrams);
+        find_in_document((*queries)[i]);
     }
 #ifdef PRINT_STATISTICS
     computeTimer.add();
@@ -379,18 +365,7 @@ void init(std::istream& input)
 
     initLinearMap();
 
-    ngrams = load_init_data(input);
-
-    /*for (size_t i = 0; i < ngrams->size(); i++)
-    {
-        nfa->addWord((*ngrams)[i], i);
-
-#ifdef PRINT_STATISTICS
-        endPrefixCounter[(*ngrams)[i].hashList[(*ngrams)[i].hashList.size() - 1]]++;
-        init_ngrams++;
-        ngram_length += (*ngrams)[i].length;
-#endif
-    }*/
+    load_init_data(input);
 }
 
 int main()

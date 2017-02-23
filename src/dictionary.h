@@ -32,28 +32,10 @@ public:
         return hash;
     }
 
-    void createWord(const std::string& word, size_t start, std::vector<DictHash>& hashList)
-    {
-        size_t size = word.size();
-        for (size_t i = start; i < size; i++)
-        {
-            char c = word[i];
-            if (c == ' ')
-            {
-                hashList.push_back(this->insert(this->prefix));
-                this->prefix.clear();
-            }
-            else this->prefix += c;
-        }
-
-        hashList.push_back(this->insert(this->prefix));
-        this->prefix.clear();
-    }
     template <typename MapType>
-    void createWordNfa(const std::string& word, size_t start, Nfa<MapType>& nfa, size_t wordIndex)
+    size_t createWordNfa(const std::string& word, size_t start, Nfa<MapType>& nfa, size_t timestamp)
     {
         ssize_t activeState = 0;
-        ssize_t arc;
         size_t size = word.size();
         for (size_t i = start; i < size; i++)
         {
@@ -70,8 +52,12 @@ public:
         DictHash hash = this->insert(this->prefix);
         this->nfaAddEdge(nfa, hash, activeState);
 
-        nfa.states[activeState].wordIndex = wordIndex;
+        nfa.states[activeState].word.from = timestamp;
+        nfa.states[activeState].word.to = UINT32_MAX;
+        nfa.states[activeState].word.length = word.size() - start;
         this->prefix.clear();
+
+        return (size_t) activeState;
     }
 
     template <typename MapType>
