@@ -124,12 +124,11 @@ void hash_document(Query& query)
 
 void loadWord(int from, int length, std::string& target, const std::string& source)
 {
-    /*int to = from + length;
+    int to = from + length;
     for (; from < to; from++)
     {
         target += source.at(from);
-    }*/
-    target += source.substr(from, length);
+    }
 }
 void find_in_document(Query& query)
 {
@@ -544,7 +543,7 @@ int main()
     std::cerr << "NoDuplicate ngrams found: "<< noDuplicateFound << std::endl;
     std::cerr << "Batch count: " << batch_count << std::endl;
     std::cerr << "Average batch size: " << batch_size / (double) batch_count << std::endl;
-    std::cerr << "Average SimpleHashMap bucket size: " << bucketSize / (double) dict.map.capacity << std::endl;*/
+    std::cerr << "Average SimpleHashMap bucket size: " << bucketSize / (double) dict->map.capacity << std::endl;*/
     std::cerr << "Calc time: " << calcCount << std::endl;
     std::cerr << "Sort time: " << sortCount << std::endl;
     std::cerr << "String recreate time: " << stringCreateTime << std::endl;

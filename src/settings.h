@@ -33,5 +33,3 @@ using HashMap = std::unordered_map<K, V>; //spp::sparse_hash_map<K, V>;
 #define MAX_LINEAR_MAP_SIZE (50)
 #define DICTIONARY_HASH_MAP_SIZE (2 << 17)  // must be a power of two
 #define DICTIONARY_HASH_MAP_PREALLOC (10)
-
-// TODO: overlay add with main thread

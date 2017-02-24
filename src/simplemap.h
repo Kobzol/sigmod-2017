@@ -18,9 +18,26 @@ public:
     Value value;
 };
 
+inline size_t fnv(const std::string& string)
+{
+    const char* str = string.c_str();
+    int size = (int) string.size();
+
+    char c;
+    size_t hash = 0x811c9dc5;
+
+    while (size-- && (c = *str++))
+    {
+        hash = hash ^ c;
+        hash = hash * 16777619;
+    }
+
+    return hash;
+}
+
 inline size_t hashfn(const std::string& string)
 {
-    unsigned long hash = 5381;
+    size_t hash = 5381;
     int c;
     const char* str = string.c_str();
     int size = (int) string.size();
@@ -57,14 +74,14 @@ public:
 
     void insert(const Key& key, Value value)
     {
-        size_t hash = hashfn(key) & (this->capacity - 1);
+        size_t hash = fnv(key) & (this->capacity - 1);
 
         this->nodes[hash].emplace_back(key, value);
         this->count++;
     }
     Value get(const Key& key) const
     {
-        size_t hash = hashfn(key) & (this->capacity - 1);
+        size_t hash = fnv(key) & (this->capacity - 1);
 
         std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
         SimpleMapNode<Key, Value>* start = node.data();
