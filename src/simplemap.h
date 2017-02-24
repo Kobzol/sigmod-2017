@@ -52,7 +52,7 @@ template <typename Key, typename Value>
 class SimpleMap
 {
 public:
-    SimpleMap(size_t capacity, int preallocate = 0) : capacity(capacity), count(0)
+    SimpleMap(size_t capacity, int preallocate = 0) : capacity(capacity), count(0)  // capacity has to be a power of two
     {
         this->nodes = new std::vector<SimpleMapNode<Key, Value>>[capacity];
 
@@ -79,9 +79,32 @@ public:
         this->nodes[hash].emplace_back(key, value);
         this->count++;
     }
+    void insert_hash(const Key& key, Value value, size_t hash)
+    {
+        hash = hash & (this->capacity - 1);
+
+        this->nodes[hash].emplace_back(key, value);
+        this->count++;
+    }
     Value get(const Key& key) const
     {
         size_t hash = fnv(key) & (this->capacity - 1);
+
+        std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
+        SimpleMapNode<Key, Value>* start = node.data();
+        SimpleMapNode<Key, Value>* end = start + node.size();
+
+        while (start < end)
+        {
+            if (start->key == key) return start->value;
+            start++;
+        }
+
+        return HASH_NOT_FOUND;
+    }
+    Value get_hash(const Key& key, size_t hash) const
+    {
+        hash = hash & (this->capacity - 1);
 
         std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
         SimpleMapNode<Key, Value>* start = node.data();

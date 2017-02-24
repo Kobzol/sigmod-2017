@@ -8,6 +8,7 @@
 #include "settings.h"
 #include "simplemap.h"
 #include "nfa.h"
+#include "hash.h"
 
 
 class Dictionary
@@ -15,16 +16,16 @@ class Dictionary
 public:
     Dictionary() : map(DICTIONARY_HASH_MAP_SIZE, DICTIONARY_HASH_MAP_PREALLOC)
     {
-
+        this->prefix.reserve(1000);
     }
 
-    DictHash insert(const std::string& word)
+    DictHash insert(const std::string& word, size_t wordHash)
     {
-        DictHash hash = this->map.get(word);
+        DictHash hash = this->map.get_hash(word, wordHash);
         if (hash == HASH_NOT_FOUND)
         {
             hash = this->map.size();
-            this->map.insert(word, hash);
+            this->map.insert_hash(word, hash, wordHash);
 
             return hash;
         }
@@ -33,23 +34,32 @@ public:
     }
 
     template <typename MapType>
-    size_t createWordNfa(const std::string& word, size_t start, Nfa<MapType>& nfa, size_t timestamp)
+    size_t createWordNfa(const std::string& word, size_t start, Nfa<MapType>& nfa, size_t timestamp, size_t& wordHash)
     {
         ssize_t activeState = 0;
         size_t size = word.size();
+        size_t prefixHash;
+        HASH_INIT(prefixHash);
+
         for (size_t i = start; i < size; i++)
         {
             char c = word[i];
             if (c == ' ')
             {
-                DictHash hash = this->insert(this->prefix);
+                DictHash hash = this->insert(this->prefix, prefixHash);
                 this->nfaAddEdge(nfa, hash, activeState);
                 this->prefix.clear();
+                HASH_INIT(prefixHash);
             }
-            else this->prefix += c;
+            else
+            {
+                this->prefix += c;
+                HASH_UPDATE(prefixHash, c);
+            }
+            HASH_UPDATE(wordHash, c);
         }
 
-        DictHash hash = this->insert(this->prefix);
+        DictHash hash = this->insert(this->prefix, prefixHash);
         this->nfaAddEdge(nfa, hash, activeState);
 
         nfa.states[activeState].word.from = timestamp;

@@ -225,7 +225,7 @@ public:
         this->states[activeState].wordIndex = wordIndex;
     }*/
 
-    void feedWord(NfaVisitor& visitor, const MapType& input, std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp)
+    void feedWord(NfaVisitor& visitor, MapType input, std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp)
     {
         size_t currentStateIndex = visitor.stateIndex;
         size_t nextStateIndex = 1 - currentStateIndex;

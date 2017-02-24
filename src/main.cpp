@@ -5,16 +5,15 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <atomic>
+#include <omp.h>
 #include <unistd.h>
 
 #include "settings.h"
 #include "word.h"
 #include "dictionary.h"
 #include "query.h"
-#include "nfa.h"
 #include "timer.h"
-#include <omp.h>
-#include <fcntl.h>
+#include "hash.h"
 
 static Dictionary* dict;
 static SimpleMap<std::string, DictHash>* wordMap;
@@ -81,7 +80,8 @@ void load_init_data(std::istream& input)
         }
         else
         {
-            size_t index = dict->createWordNfa(line, 0, *nfa, 0);
+            size_t prefixHash;
+            size_t index = dict->createWordNfa(line, 0, *nfa, 0, prefixHash);
             (*wordMap).insert("A " + line, (DictHash)(index));
 #ifdef PRINT_STATISTICS
             updateNgramStats(line);
@@ -148,13 +148,16 @@ void find_in_document(Query& query)
     int size = (int) query.document.size();
     std::string& line = query.document;
     std::string prefix;
+    size_t prefixHash;
+    HASH_INIT(prefixHash);
     int i = 2;
+
     for (; i < size; i++)
     {
         char c = line[i];
         if (__builtin_expect(c == ' ', false))
         {
-            DictHash hash = dict->map.get(prefix);
+            DictHash hash = dict->map.get_hash(prefix, prefixHash);
             if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
                 nfa->feedWord(visitor, hash, indices, timestamp);
@@ -192,12 +195,17 @@ void find_in_document(Query& query)
 #endif
             }
 
+            HASH_INIT(prefixHash);
             prefix.clear();
         }
-        else prefix += c;
+        else
+        {
+            prefix += c;
+            HASH_UPDATE(prefixHash, c);
+        }
     }
 
-    DictHash hash = dict->map.get(prefix);
+    DictHash hash = dict->map.get_hash(prefix, prefixHash);
     if (hash != HASH_NOT_FOUND)
     {
         nfa->feedWord(visitor, hash, indices, timestamp);
@@ -264,12 +272,17 @@ void add_ngram(const std::string& line, size_t timestamp)
 #ifdef PRINT_STATISTICS
     Timer addTimer;
 #endif
-    size_t index = dict->createWordNfa<size_t>(line, 2, *nfa, timestamp);
+    size_t wordHash;
+    HASH_INIT(wordHash);
+    HASH_UPDATE(wordHash, 'A');
+    HASH_UPDATE(wordHash, ' ');
+
+    size_t index = dict->createWordNfa<size_t>(line, 2, *nfa, timestamp, wordHash);
 #ifdef PRINT_STATISTICS
     addCreateWord += addTimer.get();
     addTimer.start();
 #endif
-    (*wordMap).insert(line, (DictHash) index);
+    (*wordMap).insert_hash(line, (DictHash) index, wordHash);
 #ifdef PRINT_STATISTICS
     addWordMap += addTimer.get();
 #endif
@@ -373,7 +386,7 @@ void clear_buffer()
 void init(std::istream& input)
 {
     dict = new Dictionary();
-    wordMap = new SimpleMap<std::string, DictHash>(2000000);
+    wordMap = new SimpleMap<std::string, DictHash>(2 << 20);
     nfa = new Nfa<size_t>();
 
     omp_set_num_threads(THREAD_COUNT);
