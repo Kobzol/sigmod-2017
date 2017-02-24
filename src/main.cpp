@@ -11,15 +11,19 @@
 #include "word.h"
 #include "dictionary.h"
 #include "query.h"
-#include "nfa.h"
 #include "timer.h"
+#include "job.h"
 #include <omp.h>
-#include <fcntl.h>
+#include <chrono>
+#include <thread>
+#include "thread.h"
 
 static Dictionary* dict;
 static SimpleMap<std::string, DictHash>* wordMap;
 static Nfa<size_t>* nfa;
-static std::vector<Query>* queries;
+std::vector<Query>* queries;
+JobQueue jobQueue;
+ThreadPool threadPool;
 
 #ifdef PRINT_STATISTICS
     static size_t ngram_word_count = 0;
@@ -304,6 +308,8 @@ void batch(size_t& queryIndex)
     prehashTimer.add();
     computeTimer.start();
 #endif
+    while (!jobQueue.is_finished());
+
     // do queries in parallel
     #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < queryIndex; i++)
@@ -331,6 +337,7 @@ void batch(size_t& queryIndex)
     writeResultTimer.add();
 #endif
     queryIndex = 0;
+    jobQueue.start_batch();
 }
 
 /*#define IO_BUFFER_SIZE (1024 * 1024 * 16)
@@ -376,6 +383,7 @@ void init(std::istream& input)
     dict = new Dictionary();
     wordMap = new SimpleMap<std::string, DictHash>(2000000);
     nfa = new Nfa<size_t>();
+    jobQueue.start_batch();
 
     omp_set_num_threads(THREAD_COUNT);
     std::ios::sync_with_stdio(false);
@@ -440,7 +448,8 @@ int main()
 #ifdef PRINT_STATISTICS
             addTimer.start();
 #endif
-            add_ngram(line, timestamp);
+            //add_ngram(line, timestamp);
+            jobQueue.add_query(timestamp, JOBTYPE_ADD, line);
 
 #ifdef PRINT_STATISTICS
             addTimer.add();
@@ -456,7 +465,8 @@ int main()
 #ifdef PRINT_STATISTICS
             deleteTimer.start();
 #endif
-            delete_ngram(line, timestamp);
+            //delete_ngram(line, timestamp);
+            jobQueue.add_query(timestamp, JOBTYPE_DELETE, line);
 
 #ifdef PRINT_STATISTICS
             deleteTimer.add();

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 class NgramHash
 {
 public:
@@ -18,22 +20,28 @@ public:
     Query()
     {
         this->result.reserve(1000);
-        //this->wordHashes.reserve(100);
     }
     Query(size_t timestamp): timestamp(timestamp)
     {
 
+    }
+    Query(const Query& other)
+    {
+        this->timestamp = other.timestamp;
+        this->document = other.document;
+        this->result = other.result;
+        this->job_finished.store(false);
     }
 
     void reset(size_t timestamp)
     {
         this->timestamp = timestamp;
         this->result.clear();
-        //this->wordHashes.clear();
+        this->job_finished.store(false);
     }
 
     size_t timestamp;
     std::string document;
-    //std::vector<NgramHash> wordHashes;
     std::string result;
+    std::atomic<bool> job_finished{false};
 };
