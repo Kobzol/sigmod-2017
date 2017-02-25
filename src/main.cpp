@@ -13,7 +13,6 @@
 #include "dictionary.h"
 #include "query.h"
 #include "timer.h"
-#include "hash.h"
 
 static Dictionary* dict;
 static SimpleMap<std::string, DictHash>* wordMap;
@@ -255,44 +254,6 @@ void batch(size_t& queryIndex)
     queryIndex = 0;
 }
 
-/*#define IO_BUFFER_SIZE (1024 * 1024 * 16)
-static char* ioBuffer;
-static size_t ioStart = 0;
-static size_t ioIndex = 0;
-bool read_line(std::string& line)
-{
-    if (feof(stdin)) return false;
-    size_t sizeLeft = IO_BUFFER_SIZE - ioIndex;
-    ssize_t count = read(STDIN_FILENO, ioBuffer + ioIndex, sizeLeft);
-    if (count <= 0) return false;
-    ioIndex += count;
-
-    size_t i = ioStart;
-    while (i < ioIndex)
-    {
-        if (ioBuffer[i] == '\n')
-        {
-            line.resize(i - ioStart);
-            std::memcpy(const_cast<char*>(line.c_str()), ioBuffer + ioStart, line.size());
-            break;
-        }
-        i++;
-    }
-
-    ioStart = i + 1;
-
-    ioBuffer = new char[IO_BUFFER_SIZE];
-    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-
-    return true;
-}
-void clear_buffer()
-{
-    ioStart = 0;
-    ioIndex = 0;
-}*/
-
 void init(std::istream& input)
 {
     dict = new Dictionary();
@@ -301,6 +262,7 @@ void init(std::istream& input)
 
     omp_set_num_threads(THREAD_COUNT);
     std::ios::sync_with_stdio(false);
+    std::cin.tie(nullptr);
 
     initLinearMap();
 

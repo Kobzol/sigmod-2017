@@ -18,7 +18,6 @@ public:
     Query()
     {
         this->result.reserve(1000);
-        //this->wordHashes.reserve(100);
     }
     Query(size_t timestamp): timestamp(timestamp)
     {
@@ -29,11 +28,9 @@ public:
     {
         this->timestamp = timestamp;
         this->result.clear();
-        //this->wordHashes.clear();
     }
 
     size_t timestamp;
     std::string document;
-    //std::vector<NgramHash> wordHashes;
     std::string result;
 };

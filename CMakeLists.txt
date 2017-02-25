@@ -11,5 +11,5 @@ ENDIF(REAL_RUN)
 
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -fstrict-aliasing -flto -fopenmp -march=native -std=c++14 -Wall")
 
-set(SOURCE_FILES src/main.cpp src/word.cpp src/dictionary.cpp src/util.cpp src/nfa.cpp src/simplemap.cpp src/simplemap.h src/timer.cpp)
+set(SOURCE_FILES src/main.cpp src/word.cpp src/dictionary.cpp src/util.cpp src/nfa.cpp src/simplemap.cpp src/simplemap.h src/timer.cpp src/input.cpp)
 add_executable(sigmod_2017 ${SOURCE_FILES})
