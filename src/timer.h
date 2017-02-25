@@ -13,14 +13,14 @@ class Timer
 public:
     void start()
     {
-        //this->point = TimerClock::now();
-        this->point = get_wall_time();
+        this->point = TimerClock::now();
+        //this->point = get_wall_time();
     }
     double get()
     {
-        return get_wall_time() - this->point;
-        //auto elapsed = TimerClock::now() - this->point;
-        //return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+        //return get_wall_time() - this->point;
+        auto elapsed = TimerClock::now() - this->point;
+        return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
     }
     double add()
     {
@@ -33,7 +33,7 @@ public:
         this->start();
     }
 
-    double total = 0;
-    //std::chrono::time_point<TimerClock> point;
-    double point;
+    long total = 0;
+    std::chrono::time_point<TimerClock> point;
+    //double point;
 };
