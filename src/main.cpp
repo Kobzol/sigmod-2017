@@ -23,22 +23,21 @@ static std::vector<Query>* queries;
     static std::atomic<int> calcCount{0};
     static std::atomic<int> sortCount{0};
     static std::atomic<int> writeStringCount{0};
-    static std::atomic<int> foundSetTime{0};
     static Timer addTimer;
     static Timer deleteTimer;
     static Timer queryTimer;
     static Timer batchTimer;
-    static Timer ioTimer;
-    static Timer prehashTimer;
+    static Timer splitJobsTimer;
     static Timer computeTimer;
+    static Timer writeResultTimer;
+    static Timer ioTimer;
     static double feedTime{0};
     static double addCreateWord{0};
 
     static int additions = 0, deletions = 0, query_count = 0;
     static size_t query_length = 0, ngram_length = 0, document_word_count = 0;
-    static size_t batch_count = 0, batch_size = 0, result_length = 0;
+    static size_t batch_count = 0, batch_size = 0;
     static size_t total_word_length = 0;
-    static Timer writeResultTimer;
 #endif
 
 void load_init_data(std::istream& input)
@@ -61,6 +60,14 @@ void load_init_data(std::istream& input)
     }
 }
 
+bool ends_with(std::string const &fullString, std::string const &ending) {
+    if (fullString.length() >= ending.length()) {
+        return (0 == fullString.compare (fullString.length() - ending.length(), ending.length(), ending));
+    } else {
+        return false;
+    }
+}
+
 void loadWord(int from, int length, std::string& target, const std::string& source)
 {
     int to = from + length;
@@ -69,7 +76,7 @@ void loadWord(int from, int length, std::string& target, const std::string& sour
         target += source.at(from);
     }
 }
-void find_in_document(Query& query, int from, int to, std::string& result)
+void find_in_document(Query& query)
 {
     std::vector<Match> matches;
     std::unordered_set<unsigned int> found;
@@ -87,65 +94,59 @@ void find_in_document(Query& query, int from, int to, std::string& result)
     int size = (int) query.document.size();
     std::string& line = query.document;
     std::string prefix;
-    size_t prefixHash;
-    HASH_INIT(prefixHash);
-
-    if (line[from - 1] != ' ' && line[from] != ' ')
-    {
-        while (line[from] != ' ') from++;
-    }
-    if (line[from] == ' ') from++;
-
-    int i = from;
+    int i = 2;
     for (; i < size; i++)
     {
         char c = line[i];
         if (__builtin_expect(c == ' ', false))
         {
-            if (prefix == "feedback")
-            {
-                int a = 5;
-            }
-
-            if (i >= to && visitor.states[visitor.stateIndex].empty())
-            {
-                break;
-            }
-
-            DictHash hash = dict->map.get_hash(prefix, prefixHash);
+            DictHash hash = dict->map.get(prefix);
             if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
-                nfa->feedWord(visitor, hash, indices, timestamp, i < to);
+                nfa->feedWord(visitor, hash, indices, timestamp, true);
+#ifdef PRINT_STATISTICS
+                nfaIterationCount++;
+                nfaStateCount += visitor.states[visitor.stateIndex].size();
+#endif
                 for (auto wordInfo : indices)
                 {
+#ifdef PRINT_STATISTICS
+#endif
                     if (found.find(wordInfo.first) == found.end())
                     {
                         found.insert(wordInfo.first);
-
+#ifdef PRINT_STATISTICS
+                        Timer stringTimer;
+                        stringTimer.start();
+#endif
                         matches.emplace_back(i - wordInfo.second, wordInfo.second);
+#ifdef PRINT_STATISTICS
+                        stringCreateTime += stringTimer.get();
+#endif
                     }
                 }
                 indices.clear();
+#ifdef PRINT_STATISTICS
+                hashFound++;
+#endif
             }
             else
             {
                 visitor.states[visitor.stateIndex].clear();
+#ifdef PRINT_STATISTICS
+                hashNotFound++;
+#endif
             }
 
-            HASH_INIT(prefixHash);
             prefix.clear();
         }
-        else
-        {
-            prefix += c;
-            HASH_UPDATE(prefixHash, c);
-        }
+        else prefix += c;
     }
 
-    DictHash hash = dict->map.get_hash(prefix, prefixHash);
+    DictHash hash = dict->map.get(prefix);
     if (hash != HASH_NOT_FOUND)
     {
-        nfa->feedWord(visitor, hash, indices, timestamp, i < to);
+        nfa->feedWord(visitor, hash, indices, timestamp, true);
         for (auto wordInfo : indices)
         {
             if (found.find(wordInfo.first) == found.end())
@@ -175,15 +176,128 @@ void find_in_document(Query& query, int from, int to, std::string& result)
 
     if (matches.size() == 0)
     {
-        result += "-1";
+        query.result += "-1";
     }
-    else loadWord(matches[0].index, matches[0].length, result, query.document);
+    else loadWord(matches[0].index, matches[0].length, query.result, query.document);
 
     for (size_t i = 1; i < matches.size(); i++)
     {
         Match& match = matches[i];
-        result += '|';
-        loadWord(match.index, match.length, result, query.document);
+        query.result += '|';
+        loadWord(match.index, match.length, query.result, query.document);
+    }
+
+#ifdef PRINT_STATISTICS
+    writeStringCount += timer.get();
+#endif
+}
+void find_in_document(Query& query, int from, int to, std::vector<std::string>& result)
+{
+    std::vector<Match> matches;
+    std::unordered_set<unsigned int> found;
+    size_t timestamp = query.timestamp;
+
+    NfaVisitor visitor;
+
+#ifdef PRINT_STATISTICS
+    Timer timer;
+    timer.start();
+    Timer feedTimer;
+#endif
+
+    std::vector<std::pair<unsigned int, unsigned int>> indices; // id, length
+    int size = (int) query.document.size();
+    std::string& line = query.document;
+    std::string prefix;
+    size_t prefixHash;
+    HASH_INIT(prefixHash);
+
+    if (line[from - 1] != ' ' && line[from] != ' ')
+    {
+        while (from < size && line[from] != ' ') from++;
+        if (from >= size) return;
+    }
+    if (line[from] == ' ') from++;
+
+    bool checkAfter = true;
+    int i = from;
+    for (; i < size; i++)
+    {
+        char c = line[i];
+        if (__builtin_expect(c == ' ', false))
+        {
+            DictHash hash = dict->map.get_hash(prefix, prefixHash);
+            if (__builtin_expect(hash != HASH_NOT_FOUND, true))
+            {
+                nfa->feedWord(visitor, hash, indices, timestamp, i <= to);
+                for (auto wordInfo : indices)
+                {
+                    if (found.find(wordInfo.first) == found.end())
+                    {
+                        found.insert(wordInfo.first);
+
+                        matches.emplace_back(i - wordInfo.second, wordInfo.second);
+                    }
+                }
+                indices.clear();
+            }
+            else visitor.states[visitor.stateIndex].clear();
+
+            HASH_INIT(prefixHash);
+            prefix.clear();
+
+            if (i >= to && visitor.states[visitor.stateIndex].empty())
+            {
+                checkAfter = false;
+                break;
+            }
+        }
+        else
+        {
+            prefix += c;
+            HASH_UPDATE(prefixHash, c);
+        }
+    }
+
+    if (checkAfter)
+    {
+        DictHash hash = dict->map.get_hash(prefix, prefixHash);
+        if (hash != HASH_NOT_FOUND)
+        {
+            nfa->feedWord(visitor, hash, indices, timestamp, i <= to);
+            for (auto wordInfo : indices)
+            {
+                if (found.find(wordInfo.first) == found.end())
+                {
+                    matches.emplace_back(i - wordInfo.second, wordInfo.second);
+                }
+            }
+        }
+    }
+
+#ifdef PRINT_STATISTICS
+    feedTime += feedTimer.total;
+    calcCount += timer.get();
+    timer.reset();
+#endif
+
+    std::sort(matches.begin(), matches.end(), [](Match& m1, Match& m2)
+    {
+        if (m1.index < m2.index) return true;
+        else if (m1.index > m2.index) return false;
+        else return m1.length <= m2.length;
+    });
+
+#ifdef PRINT_STATISTICS
+    sortCount += timer.get();
+    timer.reset();
+#endif
+
+    for (size_t i = 0; i < matches.size(); i++)
+    {
+        Match& match = matches[i];
+        result.emplace_back();
+        loadWord(match.index, match.length, result[result.size() - 1], query.document);
     }
 
 #ifdef PRINT_STATISTICS
@@ -230,14 +344,13 @@ void query(size_t& queryIndex, size_t timestamp)
         queries->resize(queries->size() * 2);
     }
 }
-void batch(size_t& queryIndex)
+
+static std::string ioResult;
+void batch_split(size_t queryIndex)
 {
 #ifdef PRINT_STATISTICS
-    batchTimer.start();
-    batch_count++;
-    batch_size += queryIndex;
+    splitJobsTimer.start();
 #endif
-
     size_t total_size = 0;
     for (size_t i = 0; i < queryIndex; i++)
     {
@@ -250,46 +363,45 @@ void batch(size_t& queryIndex)
     size_t threadId = 0;
     size_t queryId = 0;
     size_t from = 2;
+    size_t sum = 0;
 
     while (threadId < THREAD_COUNT && queryId < queryIndex)
     {
         size_t leftInQuery = (*queries)[queryId].document.size() - from;
-        size_t leftInQueryWorker = std::min(leftInQuery, workerLeft);
-        if (leftInQueryWorker > 0)
+        if (leftInQuery == 0)
         {
-            regions[threadId].emplace_back(queryId, from, from + leftInQueryWorker);
-            from += leftInQueryWorker;
-            workerLeft -= leftInQueryWorker;
-
-            leftInQuery -= leftInQueryWorker;
-            if (leftInQuery == 0)
-            {
-                from = 2;
-                queryId++;
-            }
+            from = 2;
+            queryId++;
         }
-        else
+        else if (workerLeft == 0)
         {
             threadId++;
             workerLeft = workerPart;
         }
+        else
+        {
+            size_t leftInQueryWorker = std::min(leftInQuery, workerLeft);
+            regions[threadId].emplace_back(queryId, from, from + leftInQueryWorker);
+            sum += leftInQueryWorker;
+            from += leftInQueryWorker;
+            workerLeft -= leftInQueryWorker;
+        }
     }
 
-    /*int sum = 0;
-    for (int i = 0; i < THREAD_COUNT; i++)
+    if (sum != total_size)
     {
-        for (auto& region : regions[i])
-        {
-            std::cerr << "Query " << region.queryIndex << " on thread " << i << " computes " << region.from << " to " << region.to << std::endl;
-            sum += region.to - region.from;
-        }
-    }*/
+        throw "wrong split";
+    }
+
+#ifdef PRINT_STATISTICS
+    splitJobsTimer.add();
+    computeTimer.start();
+#endif
 
     // do queries in parallel
-    //#pragma omp parallel
-    for (int tid = 0; tid < THREAD_COUNT; tid++)
+    #pragma omp parallel
     {
-        //int tid = omp_get_thread_num();
+        int tid = omp_get_thread_num();
         for (size_t i = 0; i < regions[tid].size(); i++)
         {
             QueryRegion& region = regions[tid][i];
@@ -299,34 +411,119 @@ void batch(size_t& queryIndex)
 
     // print results
 #ifdef PRINT_STATISTICS
+    computeTimer.add();
     writeResultTimer.start();
 #endif
 
     int lastQueryId = 0;
+    bool queryFirst = true;
+    bool queryOutputted = false;
+    std::unordered_set<std::string> found;
     for (size_t tid = 0; tid < THREAD_COUNT; tid++)
     {
-#ifdef PRINT_STATISTICS
-        result_length += (*queries)[i].result.size();
-#endif
         for (size_t i = 0; i < regions[tid].size(); i++)
         {
             QueryRegion& region = regions[tid][i];
-
             if (region.queryIndex != lastQueryId)
             {
+                if (!queryOutputted)
+                {
+                    ioResult += "-1\n";
+                }
+                else ioResult += '\n';
+
                 lastQueryId = region.queryIndex;
-                write(STDOUT_FILENO, "\n", 1);
+                queryOutputted = false;
+                queryFirst = true;
+                found.clear();
             }
 
-            write(STDOUT_FILENO, region.result.c_str(), region.result.size());
+            if (region.result.size() > 0)
+            {
+                bool firstFound = found.find(region.result[0]) == found.end();
+
+                if (queryFirst)
+                {
+                    queryFirst = false;
+                }
+                else if (firstFound)
+                {
+                    ioResult += '|';
+                }
+
+                if (firstFound)
+                {
+                    ioResult += region.result[0];
+                    found.insert(region.result[0]);
+                }
+
+                for (size_t str = 1; str < region.result.size(); str++)
+                {
+                    if (found.find(region.result[str]) == found.end())
+                    {
+                        found.insert(region.result[str]);
+                        ioResult += '|';
+                        ioResult += region.result[str];
+                    }
+                }
+
+                queryOutputted = true;
+            }
         }
     }
 
-    write(STDOUT_FILENO, "\n", 1);
+    if (!queryOutputted)
+    {
+        ioResult += "-1\n";
+    }
+    else ioResult += '\n';
+
+    write(STDOUT_FILENO, ioResult.c_str(), ioResult.size());
+    ioResult.clear();
+
+#ifdef PRINT_STATISTICS
+    writeResultTimer.add();
+#endif
+}
+void batch(size_t& queryIndex)
+{
+#ifdef PRINT_STATISTICS
+    batchTimer.start();
+    batch_count++;
+    batch_size += queryIndex;
+#endif
+    /*if (queryIndex < (THREAD_COUNT / 2))
+    {*/
+        batch_split(queryIndex);
+    /*}
+    else
+    {
+        #pragma omp parallel for schedule(dynamic)
+        for (size_t i = 0; i < queryIndex; i++)
+        {
+            find_in_document((*queries)[i]);
+        }
+#ifdef PRINT_STATISTICS
+        computeTimer.add();
+#endif
+
+        // print results
+#ifdef PRINT_STATISTICS
+        writeResultTimer.start();
+#endif
+        for (size_t i = 0; i < queryIndex; i++)
+        {
+            write(STDOUT_FILENO, (*queries)[i].result.c_str(), (*queries)[i].result.size());
+            write(STDOUT_FILENO, "\n", 1);
+        }
+#ifdef PRINT_STATISTICS
+        writeResultTimer.add();
+#endif
+    }*/
+
 
 #ifdef PRINT_STATISTICS
     batchTimer.add();
-    writeResultTimer.add();
 #endif
     queryIndex = 0;
 }
@@ -336,6 +533,7 @@ void init(std::istream& input)
     dict = new Dictionary();
     wordMap = new SimpleMap<std::string, DictHash>(2 << 20);
     nfa = new Nfa<size_t>();
+    ioResult.reserve(100000);
 
     omp_set_num_threads(THREAD_COUNT);
     std::ios::sync_with_stdio(false);
@@ -448,23 +646,6 @@ int main()
     }
 
 #ifdef PRINT_STATISTICS
-    std::vector<std::tuple<int, int>> prefixes;
-    size_t prefix_count = 0;
-    for (auto& kv : endPrefixCounter)
-    {
-        prefixes.push_back(std::tuple<int, int>(kv.first, kv.second));
-        prefix_count += kv.second;
-    }
-
-    std::sort(prefixes.begin(), prefixes.end(), [](std::tuple<int, int>& p1, std::tuple<int, int>& p2) {
-        return std::get<1>(p1) >= std::get<1>(p2);
-    });
-
-    for (int i = 0; i < 8; i++)
-    {
-        std::cerr << "Prefix: " << std::get<0>(prefixes[i]) << ", count: " << std::get<1>(prefixes[i]) << std::endl;
-    }*/
-
     size_t nfaEdgeCount = 0;
     for (auto& state : nfa->states)
     {
@@ -483,26 +664,25 @@ int main()
     std::cerr << "Average document length: " << query_length / (double) query_count << std::endl;
     std::cerr << "Average document word count: " << document_word_count / (double) query_count << std::endl;
     std::cerr << "Average document word length: " << total_word_length / document_word_count << std::endl;
-    std::cerr << "Average ngram word length: " << ngram_word_length / ngram_word_count << std::endl;
     std::cerr << "Average result length: " << result_length / (double) query_count << std::endl;
     std::cerr << "Batch count: " << batch_count << std::endl;
     std::cerr << "Average batch size: " << batch_size / (double) batch_count << std::endl;
     std::cerr << "Average SimpleHashMap bucket size: " << bucketSize / (double) dict->map.capacity << std::endl;
-    std::cerr << "Indices avg size: " << indicesSize / (double) indicesCount << std::endl;*/
     std::cerr << "Calc time: " << calcCount << std::endl;
     std::cerr << "Sort time: " << sortCount << std::endl;
     std::cerr << "Found set time: " << foundSetTime << std::endl;
     std::cerr << "Create result time: " << writeStringCount << std::endl;
-    std::cerr << "Write result time: " << writeResultTimer.total << std::endl;
     std::cerr << "IO time: " << ioTimer.total << std::endl;
     std::cerr << "Add time: " << addTimer.total << std::endl;
     std::cerr << "Add create word time: " << addCreateWord << std::endl;
     std::cerr << "Delete time: " << deleteTimer.total << std::endl;
-    std::cerr << "Query time: " << queryTimer.total << std::endl;
+    std::cerr << "Query time: " << queryTimer.total << std::endl;*/
     std::cerr << "Batch time: " << batchTimer.total << std::endl;
+    std::cerr << "Split jobs time: " << splitJobsTimer.total << std::endl;
     std::cerr << "Find time: " << computeTimer.total << std::endl;
-    std::cerr << "Feed time: " << feedTime << std::endl;
-    std::cerr << "Run time: " << runTimer.total << std::endl;
+    std::cerr << "Write result time: " << writeResultTimer.total << std::endl;
+    /*std::cerr << "Feed time: " << feedTime << std::endl;
+    std::cerr << "Run time: " << runTimer.total << std::endl;*/
     std::cerr << std::endl;
 #endif
 

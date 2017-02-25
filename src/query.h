@@ -25,7 +25,7 @@ public:
     int queryIndex;
     int from;
     int to;
-    std::string result;
+    std::vector<std::string> result;
 };
 
 class Query
