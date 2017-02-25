@@ -69,7 +69,7 @@ void loadWord(int from, int length, std::string& target, const std::string& sour
         target += source.at(from);
     }
 }
-void find_in_document(Query& query)
+void find_in_document(Query& query, int from, int to, std::string& result)
 {
     std::vector<Match> matches;
     std::unordered_set<unsigned int> found;
@@ -89,17 +89,33 @@ void find_in_document(Query& query)
     std::string prefix;
     size_t prefixHash;
     HASH_INIT(prefixHash);
-    int i = 2;
 
+    if (line[from - 1] != ' ' && line[from] != ' ')
+    {
+        while (line[from] != ' ') from++;
+    }
+    if (line[from] == ' ') from++;
+
+    int i = from;
     for (; i < size; i++)
     {
         char c = line[i];
         if (__builtin_expect(c == ' ', false))
         {
+            if (prefix == "feedback")
+            {
+                int a = 5;
+            }
+
+            if (i >= to && visitor.states[visitor.stateIndex].empty())
+            {
+                break;
+            }
+
             DictHash hash = dict->map.get_hash(prefix, prefixHash);
             if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
-                nfa->feedWord(visitor, hash, indices, timestamp);
+                nfa->feedWord(visitor, hash, indices, timestamp, i < to);
                 for (auto wordInfo : indices)
                 {
                     if (found.find(wordInfo.first) == found.end())
@@ -129,7 +145,7 @@ void find_in_document(Query& query)
     DictHash hash = dict->map.get_hash(prefix, prefixHash);
     if (hash != HASH_NOT_FOUND)
     {
-        nfa->feedWord(visitor, hash, indices, timestamp);
+        nfa->feedWord(visitor, hash, indices, timestamp, i < to);
         for (auto wordInfo : indices)
         {
             if (found.find(wordInfo.first) == found.end())
@@ -159,15 +175,15 @@ void find_in_document(Query& query)
 
     if (matches.size() == 0)
     {
-        query.result += "-1";
+        result += "-1";
     }
-    else loadWord(matches[0].index, matches[0].length, query.result, query.document);
+    else loadWord(matches[0].index, matches[0].length, result, query.document);
 
     for (size_t i = 1; i < matches.size(); i++)
     {
         Match& match = matches[i];
-        query.result += '|';
-        loadWord(match.index, match.length, query.result, query.document);
+        result += '|';
+        loadWord(match.index, match.length, result, query.document);
     }
 
 #ifdef PRINT_STATISTICS
@@ -222,31 +238,92 @@ void batch(size_t& queryIndex)
     batch_size += queryIndex;
 #endif
 
-#ifdef PRINT_STATISTICS
-    computeTimer.start();
-#endif
-    // do queries in parallel
-    #pragma omp parallel for schedule(dynamic)
+    size_t total_size = 0;
     for (size_t i = 0; i < queryIndex; i++)
     {
-        find_in_document((*queries)[i]);
+        total_size += (*queries)[i].document.size() - 2;
     }
-#ifdef PRINT_STATISTICS
-    computeTimer.add();
-#endif
+
+    size_t workerPart = static_cast<size_t>(std::ceil(total_size / (double) THREAD_COUNT));
+    size_t workerLeft = workerPart;
+    std::vector<QueryRegion> regions[THREAD_COUNT];
+    size_t threadId = 0;
+    size_t queryId = 0;
+    size_t from = 2;
+
+    while (threadId < THREAD_COUNT && queryId < queryIndex)
+    {
+        size_t leftInQuery = (*queries)[queryId].document.size() - from;
+        size_t leftInQueryWorker = std::min(leftInQuery, workerLeft);
+        if (leftInQueryWorker > 0)
+        {
+            regions[threadId].emplace_back(queryId, from, from + leftInQueryWorker);
+            from += leftInQueryWorker;
+            workerLeft -= leftInQueryWorker;
+
+            leftInQuery -= leftInQueryWorker;
+            if (leftInQuery == 0)
+            {
+                from = 2;
+                queryId++;
+            }
+        }
+        else
+        {
+            threadId++;
+            workerLeft = workerPart;
+        }
+    }
+
+    /*int sum = 0;
+    for (int i = 0; i < THREAD_COUNT; i++)
+    {
+        for (auto& region : regions[i])
+        {
+            std::cerr << "Query " << region.queryIndex << " on thread " << i << " computes " << region.from << " to " << region.to << std::endl;
+            sum += region.to - region.from;
+        }
+    }*/
+
+    // do queries in parallel
+    //#pragma omp parallel
+    for (int tid = 0; tid < THREAD_COUNT; tid++)
+    {
+        //int tid = omp_get_thread_num();
+        for (size_t i = 0; i < regions[tid].size(); i++)
+        {
+            QueryRegion& region = regions[tid][i];
+            find_in_document((*queries)[region.queryIndex], region.from, region.to, region.result);
+        }
+    }
 
     // print results
 #ifdef PRINT_STATISTICS
     writeResultTimer.start();
 #endif
-    for (size_t i = 0; i < queryIndex; i++)
+
+    int lastQueryId = 0;
+    for (size_t tid = 0; tid < THREAD_COUNT; tid++)
     {
 #ifdef PRINT_STATISTICS
         result_length += (*queries)[i].result.size();
 #endif
-        write(STDOUT_FILENO, (*queries)[i].result.c_str(), (*queries)[i].result.size());
-        write(STDOUT_FILENO, "\n", 1);
+        for (size_t i = 0; i < regions[tid].size(); i++)
+        {
+            QueryRegion& region = regions[tid][i];
+
+            if (region.queryIndex != lastQueryId)
+            {
+                lastQueryId = region.queryIndex;
+                write(STDOUT_FILENO, "\n", 1);
+            }
+
+            write(STDOUT_FILENO, region.result.c_str(), region.result.size());
+        }
     }
+
+    write(STDOUT_FILENO, "\n", 1);
+
 #ifdef PRINT_STATISTICS
     batchTimer.add();
     writeResultTimer.add();
@@ -367,14 +444,11 @@ int main()
             }
 #endif
         }
-        else
-        {
-            batch(queryIndex);
-        }
+        else batch(queryIndex);
     }
 
 #ifdef PRINT_STATISTICS
-    /*std::vector<std::tuple<int, int>> prefixes;
+    std::vector<std::tuple<int, int>> prefixes;
     size_t prefix_count = 0;
     for (auto& kv : endPrefixCounter)
     {

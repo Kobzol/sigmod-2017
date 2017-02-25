@@ -188,21 +188,25 @@ public:
         this->createState();    // add root state
     }
 
-    void feedWord(NfaVisitor& visitor, MapType input, std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp)
+    void feedWord(NfaVisitor& visitor, MapType input, std::vector<std::pair<unsigned int, unsigned int>>& results,
+                  size_t timestamp, bool includeStartState)
     {
         size_t currentStateIndex = visitor.stateIndex;
         size_t nextStateIndex = 1 - currentStateIndex;
 
         visitor.states[nextStateIndex].clear();
 
-        ssize_t arc = this->rootState.get_arc(input);
-        if (arc != NO_ARC)
+        if (includeStartState)
         {
-            visitor.states[nextStateIndex].push_back(arc);
-            NfaStateType<MapType>& nextState = this->states[arc];
-            if (nextState.word.is_active(timestamp))
+            ssize_t arc = this->rootState.get_arc(input);
+            if (arc != NO_ARC)
             {
-                results.emplace_back(arc, nextState.word.length);
+                visitor.states[nextStateIndex].push_back(arc);
+                NfaStateType<MapType>& nextState = this->states[arc];
+                if (nextState.word.is_active(timestamp))
+                {
+                    results.emplace_back(arc, nextState.word.length);
+                }
             }
         }
 

@@ -12,6 +12,22 @@ public:
     DictHash hash;
 };
 
+class QueryRegion
+{
+public:
+    QueryRegion(int queryIndex, int from, int to) : queryIndex(queryIndex),
+                                                    from(from),
+                                                    to(to)
+    {
+
+    }
+
+    int queryIndex;
+    int from;
+    int to;
+    std::string result;
+};
+
 class Query
 {
 public:
