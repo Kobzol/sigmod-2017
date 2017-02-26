@@ -3,7 +3,7 @@
 #ifndef REAL_RUN
     //#define LOAD_FROM_FILE "sig17starterpack/sample.load"
     //#define LOAD_FROM_FILE "web.load"
-    #define LOAD_FROM_FILE "large.load"
+    #define LOAD_FROM_FILE "50000_load/load"
 #endif
 
 //#define PRINT_STATISTICS
@@ -26,6 +26,8 @@ using DictHash = unsigned int;
 template <typename K, typename V>
 using HashMap = std::unordered_map<K, V>; //spp::sparse_hash_map<K, V>;
 
-#define MAX_LINEAR_MAP_SIZE (50)
-#define DICTIONARY_HASH_MAP_SIZE (2 << 19)  // must be a power of two
+#define MAX_LINEAR_MAP_SIZE (30)
+#define DICTIONARY_HASH_MAP_SIZE (2 << 21)  // must be a power of two
 #define DICTIONARY_HASH_MAP_PREALLOC (10)
+
+// not scaling: simplemap linear probe, NFA linear map

@@ -26,7 +26,6 @@ public:
         {
             hash = this->map.size();
             this->map.insert_hash(word, hash, wordHash);
-
             return hash;
         }
 
@@ -44,7 +43,7 @@ public:
         for (size_t i = start; i < size; i++)
         {
             char c = word[i];
-            if (c == ' ')
+            if (__builtin_expect(c == ' ', false))
             {
                 DictHash hash = this->insert(this->prefix, prefixHash);
                 this->nfaAddEdge(nfa, hash, activeState);
@@ -91,7 +90,7 @@ public:
             if (arc == NO_ARC)
             {
                 size_t stateId = nfa.createState();
-                CombinedNfaState<MapType>& state = nfa.states[activeState];
+                NfaStateType<MapType>& state = nfa.states[activeState];
                 (state.*(state.add_fn))(hash, stateId);
                 activeState = stateId;
             }

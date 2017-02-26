@@ -143,3 +143,64 @@ public:
     size_t bitCapacity;
     size_t count;
 };
+
+template <typename Key, typename Value>
+class SimpleMapChained
+{
+public:
+    SimpleMapChained(size_t capacity, int preallocate = 0) : capacity(capacity), count(0)
+    {
+        this->nodes = new std::vector<SimpleMapNode<Key, Value>>[capacity];
+
+        if (preallocate > 0)
+        {
+            for (size_t i = 0; i < this->capacity; i++)
+            {
+                this->nodes[i].reserve(preallocate);
+            }
+        }
+    }
+    ~SimpleMapChained()
+    {
+        //delete[] this->nodes;
+    }
+
+    SimpleMapChained(const SimpleMapChained&)
+    {
+
+    }
+    SimpleMapChained& operator=(const SimpleMapChained&) = delete;
+
+    void insert(const Key& key, Value value)
+    {
+        size_t hash = (this->capacity - 1);
+
+        this->nodes[hash].emplace_back(key, value);
+        this->count++;
+    }
+    Value get(const Key& key) const
+    {
+        size_t hash = (this->capacity - 1);
+
+        std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
+        SimpleMapNode<Key, Value>* start = node.data();
+        SimpleMapNode<Key, Value>* end = start + node.size();
+
+        while (start < end)
+        {
+            if (start->key == key) return start->value;
+            start++;
+        }
+
+        return HASH_NOT_FOUND;
+    }
+
+    size_t size() const
+    {
+        return this->count;
+    }
+
+    std::vector<SimpleMapNode<Key, Value>>* nodes;
+    size_t capacity;
+    size_t count;
+};
