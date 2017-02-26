@@ -14,7 +14,7 @@
 class Dictionary
 {
 public:
-    Dictionary() : map(DICTIONARY_HASH_MAP_SIZE, DICTIONARY_HASH_MAP_PREALLOC)
+    Dictionary() : map(DICTIONARY_HASH_MAP_SIZE)
     {
         this->prefix.reserve(1000);
     }

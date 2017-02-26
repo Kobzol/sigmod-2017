@@ -33,6 +33,7 @@ static std::vector<Query>* queries;
     static Timer ioTimer;
     static double feedTime{0};
     static double addCreateWord{0};
+    static double addWordmap{0};
 
     static int additions = 0, deletions = 0, query_count = 0;
     static size_t query_length = 0, ngram_length = 0, document_word_count = 0;
@@ -313,6 +314,7 @@ void add_ngram(const std::string& line, size_t timestamp)
 {
 #ifdef PRINT_STATISTICS
     Timer addTimer;
+    addTimer.start();
 #endif
     size_t wordHash;
     HASH_INIT(wordHash);
@@ -322,8 +324,12 @@ void add_ngram(const std::string& line, size_t timestamp)
     size_t index = dict->createWordNfa<size_t>(line, 2, *nfa, timestamp, wordHash);
 #ifdef PRINT_STATISTICS
     addCreateWord += addTimer.get();
+    addTimer.start();
 #endif
     (*wordMap).insert_hash(line, (DictHash) index, wordHash);
+#ifdef PRINT_STATISTICS
+    addWordmap += addTimer.get();
+#endif
 }
 void query(size_t& queryIndex, size_t timestamp)
 {
@@ -380,7 +386,7 @@ void batch_split(size_t queryIndex)
 
     // do queries in parallel
     #pragma omp parallel for schedule(dynamic)
-    for (int i = 0; i < regions.size(); i++)
+    for (size_t i = 0; i < regions.size(); i++)
     {
         QueryRegion& region = regions[i];
         find_in_document((*queries)[region.queryIndex], region.from, region.to, region.result);
@@ -505,7 +511,7 @@ void batch(size_t& queryIndex)
 void init(std::istream& input)
 {
     dict = new Dictionary();
-    wordMap = new SimpleMap<std::string, DictHash>(2 << 20);
+    wordMap = new SimpleMap<std::string, DictHash>(WORDMAP_HASH_SIZE);
     nfa = new Nfa<size_t>();
     ioResult.reserve(100000);
 
@@ -620,18 +626,6 @@ int main()
     }
 
 #ifdef PRINT_STATISTICS
-    size_t nfaEdgeCount = 0;
-    for (auto& state : nfa->states)
-    {
-        nfaEdgeCount += state.get_size();
-    }
-
-    size_t bucketSize = 0;
-    for (size_t i = 0; i < dict->map.capacity; i++)
-    {
-        bucketSize += dict->map.nodes[i].size();
-    }
-
     /*std::cerr << "Additions: " << additions << std::endl;
     std::cerr << "Deletions: " << deletions << std::endl;
     std::cerr << "Queries: " << query_count << std::endl;
@@ -644,12 +638,13 @@ int main()
     std::cerr << "Average SimpleHashMap bucket size: " << bucketSize / (double) dict->map.capacity << std::endl;
     std::cerr << "Calc time: " << calcCount << std::endl;
     std::cerr << "Sort time: " << sortCount << std::endl;
-    std::cerr << "Create result time: " << writeStringCount << std::endl;
+    std::cerr << "Create result time: " << writeStringCount << std::endl;*/
     std::cerr << "IO time: " << ioTimer.total << std::endl;
     std::cerr << "Add time: " << addTimer.total << std::endl;
     std::cerr << "Add create word time: " << addCreateWord << std::endl;
+    std::cerr << "Add wordmap time: " << addWordmap << std::endl;
     std::cerr << "Delete time: " << deleteTimer.total << std::endl;
-    std::cerr << "Query time: " << queryTimer.total << std::endl;*/
+    std::cerr << "Query time: " << queryTimer.total << std::endl;
     std::cerr << "Batch time: " << batchTimer.total << std::endl;
     std::cerr << "Split jobs time: " << splitJobsTimer.total << std::endl;
     std::cerr << "Find time: " << computeTimer.total << std::endl;

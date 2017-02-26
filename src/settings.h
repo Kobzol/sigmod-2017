@@ -13,6 +13,7 @@ using DictHash = unsigned int;
 
 #define THREAD_COUNT (25)
 #define JOB_SPLIT_SIZE (10000UL)
+#define WORDMAP_HASH_SIZE (2 << 24)
 
 #ifdef REAL_RUN
     #ifndef THREAD_COUNT
@@ -29,6 +30,5 @@ using HashMap = std::unordered_map<K, V>; //spp::sparse_hash_map<K, V>;
 
 #define MAX_LINEAR_MAP_SIZE (30)
 #define DICTIONARY_HASH_MAP_SIZE (2 << 21)  // must be a power of two
-#define DICTIONARY_HASH_MAP_PREALLOC (10)
 
-// not scaling: simplemap linear probe, NFA linear map
+// not scaling: simplemap linear probe (dict + wordmap), NFA linear map

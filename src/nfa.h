@@ -3,15 +3,21 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
+#include <iostream>
+#include <atomic>
+
 #include "word.h"
 #include "util.h"
 #include "simplemap.h"
+#include "timer.h"
 
 #define NO_ARC ((ssize_t) -1)
 
 #define LINEAR_MAP_SIZE (1024 * 1024)
 extern ssize_t* linearMap;
 void initLinearMap();
+
+extern std::atomic<int> nfaEmplaceTime;
 
 class NfaVisitor
 {
@@ -137,12 +143,12 @@ public:
     {
         this->linearMap.emplace_back(input, index);
 
-        if (this->linearMap.size() > MAX_LINEAR_MAP_SIZE)
+        if (__builtin_expect(this->linearMap.size() > MAX_LINEAR_MAP_SIZE, false))
         {
             int size = (int) this->linearMap.size();
             for (int i = 0; i < size; i++)
             {
-                this->hashMap[this->linearMap[i].first] = this->linearMap[i].second;
+                this->hashMap.insert({this->linearMap[i].first, this->linearMap[i].second});
             }
 
             this->get_fn = &CombinedNfaState<MapType>::get_arc_hash;
@@ -163,7 +169,7 @@ public:
 
     void add_arc_hash(const MapType& input, size_t index)
     {
-        this->hashMap[input] = index;
+        this->hashMap.insert({input, (unsigned int) index});
     }
 
     std::vector<std::pair<MapType, unsigned int>> linearMap;
@@ -184,7 +190,7 @@ class Nfa
 public:
     Nfa()
     {
-        this->states.reserve(100000);
+        this->states.reserve(2 << 23);
         this->createState();    // add root state
     }
 

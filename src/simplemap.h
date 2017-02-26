@@ -151,6 +151,7 @@ public:
     SimpleMapChained(size_t capacity, int preallocate = 0) : capacity(capacity), count(0)
     {
         this->nodes = new std::vector<SimpleMapNode<Key, Value>>[capacity];
+        this->bitCapacity = capacity - 1;
 
         if (preallocate > 0)
         {
@@ -173,14 +174,21 @@ public:
 
     void insert(const Key& key, Value value)
     {
-        size_t hash = (this->capacity - 1);
+        size_t hash = fnv(key) & this->bitCapacity;
+
+        this->nodes[hash].emplace_back(key, value);
+        this->count++;
+    }
+    void insert_hash(const Key& key, Value value, size_t hash)
+    {
+        hash = hash & this->bitCapacity;
 
         this->nodes[hash].emplace_back(key, value);
         this->count++;
     }
     Value get(const Key& key) const
     {
-        size_t hash = (this->capacity - 1);
+        size_t hash = fnv(key) & this->bitCapacity;
 
         std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
         SimpleMapNode<Key, Value>* start = node.data();
@@ -195,12 +203,8 @@ public:
         return HASH_NOT_FOUND;
     }
 
-    size_t size() const
-    {
-        return this->count;
-    }
-
     std::vector<SimpleMapNode<Key, Value>>* nodes;
     size_t capacity;
+    size_t bitCapacity;
     size_t count;
 };
