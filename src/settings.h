@@ -14,6 +14,7 @@ using DictHash = unsigned int;
 #define THREAD_COUNT (25)
 #define JOB_SPLIT_SIZE (10000UL)
 #define WORDMAP_HASH_SIZE (2 << 24)
+#define NFA_STATES_INITIAL_SIZE (2 << 23)
 
 #ifdef REAL_RUN
     #ifndef THREAD_COUNT

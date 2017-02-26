@@ -95,27 +95,24 @@ void find_in_document(Query& query)
     int size = (int) query.document.size();
     std::string& line = query.document;
     std::string prefix;
+    size_t prefixHash;
+    HASH_INIT(prefixHash);
     int i = 2;
+
     for (; i < size; i++)
     {
         char c = line[i];
         if (__builtin_expect(c == ' ', false))
         {
-            DictHash hash = dict->map.get(prefix);
+            DictHash hash = dict->map.get_hash(prefix, prefixHash);
             if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
-                nfa->feedWord(visitor, hash, indices, timestamp, true);
+                nfa->feedWordWithInitial(visitor, hash, indices, timestamp);
                 for (auto wordInfo : indices)
                 {
-#ifdef PRINT_STATISTICS
-#endif
                     if (found.find(wordInfo.first) == found.end())
                     {
                         found.insert(wordInfo.first);
-#ifdef PRINT_STATISTICS
-                        Timer stringTimer;
-                        stringTimer.start();
-#endif
                         matches.emplace_back(i - wordInfo.second, wordInfo.second);
                     }
                 }
@@ -126,15 +123,20 @@ void find_in_document(Query& query)
                 visitor.states[visitor.stateIndex].clear();
             }
 
+            HASH_INIT(prefixHash);
             prefix.clear();
         }
-        else prefix += c;
+        else
+        {
+            prefix += c;
+            HASH_UPDATE(prefixHash, c);
+        }
     }
 
-    DictHash hash = dict->map.get(prefix);
+    DictHash hash = dict->map.get_hash(prefix, prefixHash);
     if (hash != HASH_NOT_FOUND)
     {
-        nfa->feedWord(visitor, hash, indices, timestamp, true);
+        nfa->feedWordWithInitial(visitor, hash, indices, timestamp);
         for (auto wordInfo : indices)
         {
             if (found.find(wordInfo.first) == found.end())

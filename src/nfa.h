@@ -3,8 +3,6 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
-#include <iostream>
-#include <atomic>
 
 #include "word.h"
 #include "util.h"
@@ -16,8 +14,6 @@
 #define LINEAR_MAP_SIZE (1024 * 1024)
 extern ssize_t* linearMap;
 void initLinearMap();
-
-extern std::atomic<int> nfaEmplaceTime;
 
 class NfaVisitor
 {
@@ -190,7 +186,7 @@ class Nfa
 public:
     Nfa()
     {
-        this->states.reserve(2 << 23);
+        this->states.reserve(NFA_STATES_INITIAL_SIZE);
         this->createState();    // add root state
     }
 
@@ -213,6 +209,43 @@ public:
                 {
                     results.emplace_back(arc, nextState.word.length);
                 }
+            }
+        }
+
+        for (ssize_t stateId : visitor.states[currentStateIndex])
+        {
+            NfaStateType<MapType>& state = this->states[stateId];
+            ssize_t nextStateId = (state.*(state.get_fn))(input);
+            if (nextStateId != NO_ARC)
+            {
+                visitor.states[nextStateIndex].push_back(nextStateId);
+
+                NfaStateType<MapType>& nextState = this->states[nextStateId];
+                if (nextState.word.is_active(timestamp))
+                {
+                    results.emplace_back(nextStateId, nextState.word.length);
+                }
+            }
+        }
+
+        visitor.stateIndex = nextStateIndex;
+    }
+    void feedWordWithInitial(NfaVisitor& visitor, MapType input,
+                             std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp)
+    {
+        size_t currentStateIndex = visitor.stateIndex;
+        size_t nextStateIndex = 1 - currentStateIndex;
+
+        visitor.states[nextStateIndex].clear();
+
+        ssize_t arc = this->rootState.get_arc(input);
+        if (arc != NO_ARC)
+        {
+            visitor.states[nextStateIndex].push_back(arc);
+            NfaStateType<MapType>& nextState = this->states[arc];
+            if (nextState.word.is_active(timestamp))
+            {
+                results.emplace_back(arc, nextState.word.length);
             }
         }
 
