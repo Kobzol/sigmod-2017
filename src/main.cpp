@@ -350,15 +350,13 @@ void batch_split(size_t queryIndex)
         total_size += (*queries)[i].document.size() - 2;
     }
 
-    size_t workerPart = static_cast<size_t>(std::ceil(total_size / (double) THREAD_COUNT));
-    size_t workerLeft = workerPart;
-    std::vector<QueryRegion> regions[THREAD_COUNT];
-    size_t threadId = 0;
+    size_t workerPart = std::max(JOB_SPLIT_SIZE, static_cast<size_t>(std::ceil(total_size / (double) THREAD_COUNT)));
+    std::vector<QueryRegion> regions;
     size_t queryId = 0;
     size_t from = 2;
     size_t sum = 0;
 
-    while (threadId < THREAD_COUNT && queryId < queryIndex)
+    while (queryId < queryIndex)
     {
         size_t leftInQuery = (*queries)[queryId].document.size() - from;
         if (leftInQuery == 0)
@@ -366,18 +364,12 @@ void batch_split(size_t queryIndex)
             from = 2;
             queryId++;
         }
-        else if (workerLeft == 0)
-        {
-            threadId++;
-            workerLeft = workerPart;
-        }
         else
         {
-            size_t leftInQueryWorker = std::min(leftInQuery, workerLeft);
-            regions[threadId].emplace_back(queryId, from, from + leftInQueryWorker);
+            size_t leftInQueryWorker = std::min(leftInQuery, workerPart);
+            regions.emplace_back(queryId, from, from + leftInQueryWorker);
             sum += leftInQueryWorker;
             from += leftInQueryWorker;
-            workerLeft -= leftInQueryWorker;
         }
     }
 
@@ -387,15 +379,11 @@ void batch_split(size_t queryIndex)
 #endif
 
     // do queries in parallel
-    #pragma omp parallel
-    //for (int tid = 0; tid < THREAD_COUNT; tid++)
+    #pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < regions.size(); i++)
     {
-        int tid = omp_get_thread_num();
-        for (size_t i = 0; i < regions[tid].size(); i++)
-        {
-            QueryRegion& region = regions[tid][i];
-            find_in_document((*queries)[region.queryIndex], region.from, region.to, region.result);
-        }
+        QueryRegion& region = regions[i];
+        find_in_document((*queries)[region.queryIndex], region.from, region.to, region.result);
     }
 
     // print results
@@ -408,56 +396,53 @@ void batch_split(size_t queryIndex)
     bool queryFirst = true;
     bool queryOutputted = false;
     std::unordered_set<std::string> found;
-    for (size_t tid = 0; tid < THREAD_COUNT; tid++)
+    for (size_t i = 0; i < regions.size(); i++)
     {
-        for (size_t i = 0; i < regions[tid].size(); i++)
+        QueryRegion& region = regions[i];
+        if (region.queryIndex != lastQueryId)
         {
-            QueryRegion& region = regions[tid][i];
-            if (region.queryIndex != lastQueryId)
+            if (!queryOutputted)
             {
-                if (!queryOutputted)
-                {
-                    ioResult += "-1\n";
-                }
-                else ioResult += '\n';
+                ioResult += "-1\n";
+            }
+            else ioResult += '\n';
 
-                lastQueryId = region.queryIndex;
-                queryOutputted = false;
-                queryFirst = true;
-                found.clear();
+            lastQueryId = region.queryIndex;
+            queryOutputted = false;
+            queryFirst = true;
+            found.clear();
+        }
+
+        if (region.result.size() > 0)
+        {
+            bool firstFound = found.find(region.result[0]) == found.end();
+
+            if (queryFirst)
+            {
+                queryFirst = false;
+            }
+            else if (firstFound)
+            {
+                ioResult += '|';
             }
 
-            if (region.result.size() > 0)
+            if (firstFound)
             {
-                bool firstFound = found.find(region.result[0]) == found.end();
+                ioResult += region.result[0];
+                found.insert(region.result[0]);
+            }
 
-                if (queryFirst)
+            for (size_t str = 1; str < region.result.size(); str++)
+            {
+                if (found.find(region.result[str]) == found.end())
                 {
-                    queryFirst = false;
-                }
-                else if (firstFound)
-                {
+                    found.insert(region.result[str]);
                     ioResult += '|';
+                    ioResult += region.result[str];
                 }
-
-                if (firstFound)
-                {
-                    ioResult += region.result[0];
-                    found.insert(region.result[0]);
-                }
-
-                for (size_t str = 1; str < region.result.size(); str++)
-                {
-                    if (found.find(region.result[str]) == found.end())
-                    {
-                        found.insert(region.result[str]);
-                        ioResult += '|';
-                        ioResult += region.result[str];
-                    }
-                }
-
-                queryOutputted = true;
             }
+
+            queryOutputted = true;
         }
     }
 
