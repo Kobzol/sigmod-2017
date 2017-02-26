@@ -6,12 +6,12 @@
     #define LOAD_FROM_FILE "50000_load/load"
 #endif
 
-//#define PRINT_STATISTICS
+#define PRINT_STATISTICS
 
 using DictHash = unsigned int;
 #define HASH_NOT_FOUND ((DictHash) -1)
 
-#define THREAD_COUNT (8)
+#define THREAD_COUNT (40)
 
 #ifdef REAL_RUN
     #ifndef THREAD_COUNT

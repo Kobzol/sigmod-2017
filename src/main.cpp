@@ -104,10 +104,6 @@ void find_in_document(Query& query)
             if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
                 nfa->feedWord(visitor, hash, indices, timestamp, true);
-#ifdef PRINT_STATISTICS
-                nfaIterationCount++;
-                nfaStateCount += visitor.states[visitor.stateIndex].size();
-#endif
                 for (auto wordInfo : indices)
                 {
 #ifdef PRINT_STATISTICS
@@ -120,22 +116,13 @@ void find_in_document(Query& query)
                         stringTimer.start();
 #endif
                         matches.emplace_back(i - wordInfo.second, wordInfo.second);
-#ifdef PRINT_STATISTICS
-                        stringCreateTime += stringTimer.get();
-#endif
                     }
                 }
                 indices.clear();
-#ifdef PRINT_STATISTICS
-                hashFound++;
-#endif
             }
             else
             {
                 visitor.states[visitor.stateIndex].clear();
-#ifdef PRINT_STATISTICS
-                hashNotFound++;
-#endif
             }
 
             prefix.clear();
@@ -220,6 +207,8 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
     if (line[from] == ' ') from++;
 
     bool checkAfter = true;
+    bool startNewWords = true;
+
     int i = from;
     for (; i < size; i++)
     {
@@ -229,7 +218,7 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
             DictHash hash = dict->map.get_hash(prefix, prefixHash);
             if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
-                nfa->feedWord(visitor, hash, indices, timestamp, i <= to);
+                nfa->feedWord(visitor, hash, indices, timestamp, startNewWords);
                 for (auto wordInfo : indices)
                 {
                     if (found.find(wordInfo.first) == found.end())
@@ -243,14 +232,16 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
             }
             else visitor.states[visitor.stateIndex].clear();
 
-            HASH_INIT(prefixHash);
-            prefix.clear();
-
             if (i >= to && visitor.states[visitor.stateIndex].empty())
             {
                 checkAfter = false;
                 break;
             }
+
+            HASH_INIT(prefixHash);
+            prefix.clear();
+
+            startNewWords = i < to;
         }
         else
         {
@@ -264,7 +255,7 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
         DictHash hash = dict->map.get_hash(prefix, prefixHash);
         if (hash != HASH_NOT_FOUND)
         {
-            nfa->feedWord(visitor, hash, indices, timestamp, i <= to);
+            nfa->feedWord(visitor, hash, indices, timestamp, startNewWords);
             for (auto wordInfo : indices)
             {
                 if (found.find(wordInfo.first) == found.end())
@@ -351,6 +342,8 @@ void batch_split(size_t queryIndex)
 #ifdef PRINT_STATISTICS
     splitJobsTimer.start();
 #endif
+    if (queryIndex < 1) return;
+
     size_t total_size = 0;
     for (size_t i = 0; i < queryIndex; i++)
     {
@@ -388,11 +381,6 @@ void batch_split(size_t queryIndex)
         }
     }
 
-    if (sum != total_size)
-    {
-        throw "wrong split";
-    }
-
 #ifdef PRINT_STATISTICS
     splitJobsTimer.add();
     computeTimer.start();
@@ -400,6 +388,7 @@ void batch_split(size_t queryIndex)
 
     // do queries in parallel
     #pragma omp parallel
+    //for (int tid = 0; tid < THREAD_COUNT; tid++)
     {
         int tid = omp_get_thread_num();
         for (size_t i = 0; i < regions[tid].size(); i++)
@@ -492,10 +481,10 @@ void batch(size_t& queryIndex)
     batch_count++;
     batch_size += queryIndex;
 #endif
-    /*if (queryIndex < (THREAD_COUNT / 2))
-    {*/
+    if (queryIndex <= THREAD_COUNT)
+    {
         batch_split(queryIndex);
-    /*}
+    }
     else
     {
         #pragma omp parallel for schedule(dynamic)
@@ -519,7 +508,7 @@ void batch(size_t& queryIndex)
 #ifdef PRINT_STATISTICS
         writeResultTimer.add();
 #endif
-    }*/
+    }
 
 
 #ifdef PRINT_STATISTICS
@@ -670,7 +659,6 @@ int main()
     std::cerr << "Average SimpleHashMap bucket size: " << bucketSize / (double) dict->map.capacity << std::endl;
     std::cerr << "Calc time: " << calcCount << std::endl;
     std::cerr << "Sort time: " << sortCount << std::endl;
-    std::cerr << "Found set time: " << foundSetTime << std::endl;
     std::cerr << "Create result time: " << writeStringCount << std::endl;
     std::cerr << "IO time: " << ioTimer.total << std::endl;
     std::cerr << "Add time: " << addTimer.total << std::endl;

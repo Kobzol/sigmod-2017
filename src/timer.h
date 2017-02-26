@@ -18,7 +18,7 @@ public:
     }
     double get()
     {
-        return get_wall_time() - this->point;
+        return (get_wall_time() - this->point) * 1000.0;
         //auto elapsed = TimerClock::now() - this->point;
         //return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
     }
