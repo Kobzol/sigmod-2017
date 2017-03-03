@@ -11,16 +11,34 @@
 using DictHash = unsigned int;
 #define HASH_NOT_FOUND ((DictHash) -1)
 
-#define THREADPOOL_COUNT (4)
+//#define LOCAL_RUN
+
+#define THREADPOOL_COUNT (8)
 #define JOBS_SIZE (1024 * 1024 * 15)
+#define JOB_BATCH_SIZE (15)
 
 #define THREAD_COUNT (8)
 #define JOB_SPLIT_SIZE (5000UL)
 #define WORDMAP_HASH_SIZE (2 << 22)
-#define NFA_STATES_INITIAL_SIZE (2 << 25)
+#define NFA_STATES_INITIAL_SIZE (2 << 26)
 #define MAX_LINEAR_MAP_SIZE (50)
 #define DICTIONARY_HASH_MAP_SIZE (2 << 22)  // must be a power of two
 #define LINEAR_MAP_SIZE (1024 * 1024 * 12)
+
+#ifdef LOCAL_RUN
+    #undef THREADPOOL_COUNT
+    #define THREADPOOL_COUNT (2)
+    #undef JOBS_SIZE
+    #define JOBS_SIZE (1024 * 1024 * 5)
+    #undef THREAD_COUNT
+    #define THREAD_COUNT (2)
+    #undef WORDMAP_HASH_SIZE
+    #define WORDMAP_HASH_SIZE (2 << 21)
+    #undef NFA_STATES_INITIAL_SIZE
+    #define NFA_STATES_INITIAL_SIZE (2 << 21)
+    #undef DICTIONARY_HASH_MAP_SIZE
+    #define DICTIONARY_HASH_MAP_SIZE (2 << 21)
+#endif
 
 #ifdef REAL_RUN
     #ifndef THREAD_COUNT

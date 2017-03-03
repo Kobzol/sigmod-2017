@@ -27,14 +27,21 @@ public:
     {
         while (!this->terminated)
         {
-            Job* job = jobQueue.get_job();
-            if (job != nullptr)
+            int count = 0;
+            Job* jobs = jobQueue.get_jobs(count);
+            if (jobs != nullptr)
             {
-                if (job->type == JOBTYPE_ADD) add_ngram(job->data, job->timestamp);
-                else delete_ngram(job->data, job->timestamp);
+                for (int i = 0; i < count; i++)
+                {
+                    Job* job = jobs + i;
+                    //if (job->type == JOBTYPE_ADD) add_ngram(job->data, job->timestamp);
+                    //else delete_ngram(job->data, job->timestamp);
+                    add_ngram(job->data, job->timestamp);
+                }
 
-                jobQueue.workerCompleted++;
+                jobQueue.workerCompleted += count;
             }
+            else std::this_thread::sleep_for(std::chrono::nanoseconds(10));
         }
     }
 

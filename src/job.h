@@ -50,14 +50,14 @@ public:
         this->queries[this->index].data = data;
         this->index++;
     }
-    Job* get_job()
+    Job* get_jobs(int& count)
     {
 #ifdef USE_MUTEX
-        if (this->workerIndex >= this->index) return nullptr;
+        if (this->get_available_job_count() == 0) return nullptr;
 
         LOCK(this->flag);
 
-        if (this->workerIndex >= this->index)
+        if (this->get_available_job_count() == 0)
         {
             UNLOCK(this->flag);
             return nullptr;
@@ -67,20 +67,28 @@ public:
         {
             return nullptr;
         }
-        if (this->workerIndex >= this->index)
+        if (this->get_available_job_count() == 0)
         {
             UNLOCK(this->flag);
             return nullptr;
         }
 #endif
 
+        count = this->get_available_job_count();
         Job* job = this->queries + this->workerIndex;
-        this->workerIndex++;
+        this->workerIndex += count;
 
         UNLOCK(this->flag);
 
         return job;
     }
+
+    inline int get_available_job_count() const
+    {
+        size_t freeCount = this->index - this->workerIndex;
+        return std::min(JOB_BATCH_SIZE, (int) freeCount);
+    }
+
     bool is_finished()
     {
         return this->workerCompleted == this->index;
@@ -90,5 +98,6 @@ public:
     std::atomic<size_t> workerCompleted{0};
     std::atomic<size_t> index{0};
     Job* queries;
+
     LOCK_INIT(flag);
 };
