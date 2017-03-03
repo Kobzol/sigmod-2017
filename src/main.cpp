@@ -23,11 +23,9 @@ static SimpleMapChained<std::string, DictHash>* wordMap;
 static Nfa<size_t>* nfa;
 static std::vector<Query>* queries;
 JobQueue jobQueue;
-ThreadPool threadPool;
+static ThreadPool threadPool;
 
 static std::vector<Job> deleteJobs;
-
-using namespace std::literals::chrono_literals;
 
 #ifdef PRINT_STATISTICS
     static std::atomic<int> calcCount{0};
@@ -41,13 +39,10 @@ using namespace std::literals::chrono_literals;
     static Timer computeTimer;
     static Timer writeResultTimer;
     static Timer ioTimer;
-    Timer insertHashTimer;
-    Timer nfaAddEdgeTimer;
-    Timer createStateTimer;
-    Timer addArcTimer;
-    Timer getArcTimer;
-    static double addCreateWord{0};
-    static double addWordmap{0};
+    Timer waitForAddPoolTimer;
+    static std::atomic<int> addCreateWord{0};
+    static std::atomic<int> addWordmap{0};
+    std::atomic<int> threadAddTime;
 #endif
 
 void load_init_data(std::istream& input)
@@ -112,7 +107,7 @@ void find_in_document(Query& query)
         char c = line[i];
         if (__builtin_expect(c == ' ', false))
         {
-            DictHash hash = dict->map.get_hash(prefix, prefixHash);
+            DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
             if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
                 nfa->feedWordWithInitial(visitor, hash, indices, timestamp);
@@ -141,7 +136,7 @@ void find_in_document(Query& query)
         }
     }
 
-    DictHash hash = dict->map.get_hash(prefix, prefixHash);
+    DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
     if (hash != HASH_NOT_FOUND)
     {
         nfa->feedWordWithInitial(visitor, hash, indices, timestamp);
@@ -224,7 +219,7 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
         char c = line[i];
         if (__builtin_expect(c == ' ', false))
         {
-            DictHash hash = dict->map.get_hash(prefix, prefixHash);
+            DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
             if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
                 nfa->feedWord(visitor, hash, indices, timestamp, startNewWords);
@@ -261,7 +256,7 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
 
     if (checkAfter)
     {
-        DictHash hash = dict->map.get_hash(prefix, prefixHash);
+        DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
         if (hash != HASH_NOT_FOUND)
         {
             nfa->feedWord(visitor, hash, indices, timestamp, startNewWords);
@@ -277,7 +272,7 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
 
 #ifdef PRINT_STATISTICS
     calcCount += timer.get();
-    timer.reset();
+    timer.start();
 #endif
 
     std::sort(matches.begin(), matches.end(), [](Match& m1, Match& m2)
@@ -289,7 +284,7 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
 
 #ifdef PRINT_STATISTICS
     sortCount += timer.get();
-    timer.reset();
+    timer.start();
 #endif
 
     for (size_t i = 0; i < matches.size(); i++)
@@ -308,9 +303,9 @@ static LOCK_INIT(deleteFlag);
 
 void delete_ngram(std::string& line, size_t timestamp)
 {
-    LOCK(deleteFlag);
+    //LOCK(deleteFlag);
     line[0] = 'A';
-    DictHash index = wordMap->get(line);
+    DictHash index = wordMap->get<false>(line);
     if (index != HASH_NOT_FOUND)
     {
         Word& ngram = nfa->states[index].word;
@@ -319,7 +314,7 @@ void delete_ngram(std::string& line, size_t timestamp)
             ngram.deactivate(timestamp);
         }
     }
-    UNLOCK(deleteFlag);
+    //UNLOCK(deleteFlag);
 }
 void add_ngram(const std::string& line, size_t timestamp)
 {
@@ -487,16 +482,27 @@ void batch(size_t& queryIndex)
     }
     else
     {
+#ifdef PRINT_STATISTICS
+        waitForAddPoolTimer.start();
+#endif
         while (!jobQueue.is_finished())
         {
-            std::this_thread::sleep_for(1ms);
+            std::this_thread::sleep_for(std::chrono::nanoseconds(10));
         }
+
+#ifdef PRINT_STATISTICS
+        waitForAddPoolTimer.add();
+        deleteTimer.start();
+#endif
 
         for (auto& job : deleteJobs)
         {
             delete_ngram(job.data, job.timestamp);
         }
         deleteJobs.clear();
+#ifdef PRINT_STATISTICS
+        deleteTimer.add();
+#endif
 
         #pragma omp parallel for schedule(dynamic)
         for (size_t i = 0; i < queryIndex; i++)
@@ -535,6 +541,7 @@ void init(std::istream& input)
     wordMap = new SimpleMapChained<std::string, DictHash>(WORDMAP_HASH_SIZE);
     nfa = new Nfa<size_t>();
     ioResult.reserve(100000);
+    deleteJobs.reserve(10000);
 
     omp_set_num_threads(THREAD_COUNT);
     std::ios::sync_with_stdio(false);
@@ -603,16 +610,9 @@ int main()
         }
         else if (op == 'D')
         {
-#ifdef PRINT_STATISTICS
-            deleteTimer.start();
-#endif
             //delete_ngram(line, timestamp);
             //jobQueue.add_query(timestamp, JOBTYPE_DELETE, line);
             deleteJobs.emplace_back(timestamp, JOBTYPE_DELETE, line);
-
-#ifdef PRINT_STATISTICS
-            deleteTimer.add();
-#endif
         }
         else if (op == 'Q')
         {
@@ -642,11 +642,13 @@ int main()
     std::cerr << "Split jobs time: " << splitJobsTimer.total << std::endl;
     std::cerr << "Find time: " << computeTimer.total << std::endl;
     std::cerr << "Write result time: " << writeResultTimer.total << std::endl;
-    std::cerr << "Insert hash time: " << insertHashTimer.total << std::endl;
+    /*std::cerr << "Insert hash time: " << insertHashTimer.total << std::endl;
     std::cerr << "NFA add edge time: " << nfaAddEdgeTimer.total << std::endl;
     std::cerr << "NFA create state time: " << createStateTimer.total << std::endl;
     std::cerr << "NFA add arc time: " << addArcTimer.total << std::endl;
-    std::cerr << "NFA get arc time: " << getArcTimer.total << std::endl;
+    std::cerr << "NFA get arc time: " << getArcTimer.total << std::endl;*/
+    std::cerr << "Thread add time: " << threadAddTime << std::endl;
+    std::cerr << "Wait for add pool time: " << waitForAddPoolTimer.total << std::endl;
     std::cerr << std::endl;
 #endif
 

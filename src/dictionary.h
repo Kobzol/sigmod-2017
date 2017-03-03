@@ -10,13 +10,6 @@
 #include "nfa.h"
 #include "hash.h"
 
-extern Timer insertHashTimer;
-extern Timer nfaAddEdgeTimer;
-extern Timer createStateTimer;
-extern Timer addArcTimer;
-extern Timer getArcTimer;
-
-
 class Dictionary
 {
 public:
@@ -143,7 +136,7 @@ public:
         else activeState = arc;
     }
 
-    template <typename MapType>
+    /*template <typename MapType>
     void nfaAddEdge(Nfa<MapType>& nfa, DictHash hash, ssize_t& activeState)
     {
         ssize_t arc;
@@ -205,7 +198,7 @@ public:
             }
             else activeState = arc;
         }
-    }
+    }*/
 
     SimpleMapChained<std::string, DictHash> map;
     LOCK_INIT(insertFlag);

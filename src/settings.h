@@ -15,7 +15,7 @@ using DictHash = unsigned int;
 
 #define THREADPOOL_COUNT (8)
 #define JOBS_SIZE (1024 * 1024 * 15)
-#define JOB_BATCH_SIZE (15)
+#define JOB_BATCH_SIZE (5)
 
 #define THREAD_COUNT (8)
 #define JOB_SPLIT_SIZE (5000UL)
@@ -23,13 +23,13 @@ using DictHash = unsigned int;
 #define NFA_STATES_INITIAL_SIZE (2 << 26)
 #define MAX_LINEAR_MAP_SIZE (50)
 #define DICTIONARY_HASH_MAP_SIZE (2 << 22)  // must be a power of two
-#define LINEAR_MAP_SIZE (1024 * 1024 * 12)
+#define LINEAR_MAP_SIZE (1024 * 1024 * 15)
 
 #ifdef LOCAL_RUN
     #undef THREADPOOL_COUNT
     #define THREADPOOL_COUNT (2)
     #undef JOBS_SIZE
-    #define JOBS_SIZE (1024 * 1024 * 5)
+    #define JOBS_SIZE (1024 * 1024 * 2)
     #undef THREAD_COUNT
     #define THREAD_COUNT (2)
     #undef WORDMAP_HASH_SIZE

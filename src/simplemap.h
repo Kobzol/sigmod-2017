@@ -220,12 +220,14 @@ public:
         UNLOCK(this->nodes[hash].flag);
         this->count++;
     }
+
+    template <bool sync=true>
     Value get(const Key& key) const
     {
         size_t hash = fnv(key) & this->bitCapacity;
 
         SimpleMapRow<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
-        LOCK(node.flag);
+        if (sync) LOCK(node.flag);
 
         SimpleMapNode<Key, Value>* start = node.items.data();
         SimpleMapNode<Key, Value>* end = start + node.items.size();
@@ -234,21 +236,23 @@ public:
         {
             if (start->key == key)
             {
-                UNLOCK(node.flag);
+                if (sync) UNLOCK(node.flag);
                 return start->value;
             }
             start++;
         }
 
-        UNLOCK(node.flag);
+        if (sync) UNLOCK(node.flag);
         return HASH_NOT_FOUND;
     }
+
+    template <bool sync=true>
     Value get_hash(const Key& key, size_t hash) const
     {
         hash = hash & this->bitCapacity;
 
         SimpleMapRow<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
-        LOCK(node.flag);
+        if (sync) LOCK(node.flag);
 
         SimpleMapNode<Key, Value>* start = node.items.data();
         SimpleMapNode<Key, Value>* end = start + node.items.size();
@@ -257,13 +261,13 @@ public:
         {
             if (start->key == key)
             {
-                UNLOCK(node.flag);
+                if (sync) UNLOCK(node.flag);
                 return start->value;
             }
             start++;
         }
 
-        UNLOCK(node.flag);
+        if (sync) UNLOCK(node.flag);
 
         return HASH_NOT_FOUND;
     }
