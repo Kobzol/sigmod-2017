@@ -194,7 +194,7 @@ public:
 
     void insert(const Key& key, Value value)
     {
-        size_t hash = key & this->bitCapacity;
+        size_t hash = fnv(key) & this->bitCapacity;
 
         this->nodes[hash].emplace_back(key, value);
         this->count++;
@@ -208,7 +208,7 @@ public:
     }
     Value get(const Key& key) const
     {
-        size_t hash = key & this->bitCapacity;
+        size_t hash = fnv(key) & this->bitCapacity;
 
         std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
         SimpleMapNode<Key, Value>* start = node.data();
@@ -221,6 +221,45 @@ public:
         }
 
         return HASH_NOT_FOUND;
+    }
+    Value get_hash(const Key& key, size_t hash) const
+    {
+        hash = hash & this->bitCapacity;
+
+        std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
+        SimpleMapNode<Key, Value>* start = node.data();
+        SimpleMapNode<Key, Value>* end = start + node.size();
+
+        while (start < end)
+        {
+            if (start->key == key) return start->value;
+            start++;
+        }
+
+        return HASH_NOT_FOUND;
+    }
+    Value get_or_insert_hash(const Key& key, size_t hash, Value value)
+    {
+        hash = hash & this->bitCapacity;
+
+        std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
+        SimpleMapNode<Key, Value>* start = node.data();
+        SimpleMapNode<Key, Value>* end = start + node.size();
+
+        while (start < end)
+        {
+            if (start->key == key) return start->value;
+            start++;
+        }
+
+        node.emplace_back(key, value);
+        this->count++;
+        return value;
+    }
+
+    inline size_t size() const
+    {
+        return this->count;
     }
 
     std::vector<SimpleMapNode<Key, Value>>* nodes;

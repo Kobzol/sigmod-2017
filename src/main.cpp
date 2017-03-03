@@ -36,14 +36,8 @@ static std::vector<Query>* queries;
     Timer createStateTimer;
     Timer addArcTimer;
     Timer getArcTimer;
-    static double feedTime{0};
     static double addCreateWord{0};
     static double addWordmap{0};
-
-    static int additions = 0, deletions = 0, query_count = 0;
-    static size_t query_length = 0, ngram_length = 0, document_word_count = 0;
-    static size_t batch_count = 0, batch_size = 0;
-    static size_t total_word_length = 0;
 #endif
 
 void load_init_data(std::istream& input)
@@ -93,7 +87,6 @@ void find_in_document(Query& query)
 #ifdef PRINT_STATISTICS
     Timer timer;
     timer.start();
-    Timer feedTimer;
 #endif
 
     std::vector<std::pair<unsigned int, unsigned int>> indices; // id, length
@@ -152,7 +145,6 @@ void find_in_document(Query& query)
     }
 
 #ifdef PRINT_STATISTICS
-    feedTime += feedTimer.total;
     calcCount += timer.get();
     timer.reset();
 #endif
@@ -197,7 +189,6 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
 #ifdef PRINT_STATISTICS
     Timer timer;
     timer.start();
-    Timer feedTimer;
 #endif
 
     std::vector<std::pair<unsigned int, unsigned int>> indices; // id, length
@@ -275,7 +266,6 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
     }
 
 #ifdef PRINT_STATISTICS
-    feedTime += feedTimer.total;
     calcCount += timer.get();
     timer.reset();
 #endif
@@ -476,10 +466,8 @@ void batch(size_t& queryIndex)
 {
 #ifdef PRINT_STATISTICS
     batchTimer.start();
-    batch_count++;
-    batch_size += queryIndex;
 #endif
-    if (queryIndex <= THREAD_COUNT)
+    if (false)//queryIndex <= THREAD_COUNT)
     {
         batch_split(queryIndex);
     }
@@ -555,11 +543,6 @@ int main()
 
     write(STDOUT_FILENO, "R\n", 2);
 
-#ifdef PRINT_STATISTICS
-    Timer runTimer;
-    runTimer.start();
-#endif
-
     while (true)
     {
         timestamp++;
@@ -590,8 +573,6 @@ int main()
 
 #ifdef PRINT_STATISTICS
             addTimer.add();
-            additions++;
-            ngram_length += line.size();
 #endif
         }
         else if (op == 'D')
@@ -603,7 +584,6 @@ int main()
 
 #ifdef PRINT_STATISTICS
             deleteTimer.add();
-            deletions++;
 #endif
         }
         else if (op == 'Q')
@@ -615,37 +595,15 @@ int main()
 
 #ifdef PRINT_STATISTICS
             queryTimer.add();
-            query_count++;
-            query_length += line.size();
-
-            document_word_count++;
-            for (size_t i = 2; i < line.size(); i++)
-            {
-                if (line[i] == ' ')
-                {
-                    document_word_count++;
-                }
-                else total_word_length++;
-            }
 #endif
         }
         else batch(queryIndex);
     }
 
 #ifdef PRINT_STATISTICS
-    /*std::cerr << "Additions: " << additions << std::endl;
-    std::cerr << "Deletions: " << deletions << std::endl;
-    std::cerr << "Queries: " << query_count << std::endl;
-    std::cerr << "Average document length: " << query_length / (double) query_count << std::endl;
-    std::cerr << "Average document word count: " << document_word_count / (double) query_count << std::endl;
-    std::cerr << "Average document word length: " << total_word_length / document_word_count << std::endl;
-    std::cerr << "Average result length: " << result_length / (double) query_count << std::endl;
-    std::cerr << "Batch count: " << batch_count << std::endl;
-    std::cerr << "Average batch size: " << batch_size / (double) batch_count << std::endl;
-    std::cerr << "Average SimpleHashMap bucket size: " << bucketSize / (double) dict->map.capacity << std::endl;
     std::cerr << "Calc time: " << calcCount << std::endl;
     std::cerr << "Sort time: " << sortCount << std::endl;
-    std::cerr << "Create result time: " << writeStringCount << std::endl;*/
+    std::cerr << "Create result time: " << writeStringCount << std::endl;
     std::cerr << "IO time: " << ioTimer.total << std::endl;
     std::cerr << "Add time: " << addTimer.total << std::endl;
     std::cerr << "Add create word time: " << addCreateWord << std::endl;
@@ -661,8 +619,6 @@ int main()
     std::cerr << "NFA create state time: " << createStateTimer.total << std::endl;
     std::cerr << "NFA add arc time: " << addArcTimer.total << std::endl;
     std::cerr << "NFA get arc time: " << getArcTimer.total << std::endl;
-    /*std::cerr << "Feed time: " << feedTime << std::endl;
-    std::cerr << "Run time: " << runTimer.total << std::endl;*/
     std::cerr << std::endl;
 #endif
 

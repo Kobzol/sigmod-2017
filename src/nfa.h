@@ -11,7 +11,6 @@
 
 #define NO_ARC ((ssize_t) -1)
 
-#define LINEAR_MAP_SIZE (1024 * 1024)
 extern ssize_t* linearMap;
 void initLinearMap();
 
