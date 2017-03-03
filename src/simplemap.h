@@ -132,6 +132,26 @@ public:
             hash = (hash + 1) & this->bitCapacity;
         }
     }
+    Value get_or_insert_hash(const Key& key, size_t hash, Value value)
+    {
+        hash = hash & this->bitCapacity;
+
+        while (true)
+        {
+            if (this->nodes[hash].key.size() == 0)
+            {
+                this->nodes[hash].key = key;
+                this->nodes[hash].value = value;
+                this->count++;
+                return value;
+            }
+            else if (this->nodes[hash].key == key)
+            {
+                return this->nodes[hash].value;
+            }
+            hash = (hash + 1) & this->bitCapacity;
+        }
+    }
 
     size_t size() const
     {
@@ -174,7 +194,7 @@ public:
 
     void insert(const Key& key, Value value)
     {
-        size_t hash = fnv(key) & this->bitCapacity;
+        size_t hash = key & this->bitCapacity;
 
         this->nodes[hash].emplace_back(key, value);
         this->count++;
@@ -188,7 +208,7 @@ public:
     }
     Value get(const Key& key) const
     {
-        size_t hash = fnv(key) & this->bitCapacity;
+        size_t hash = key & this->bitCapacity;
 
         std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
         SimpleMapNode<Key, Value>* start = node.data();

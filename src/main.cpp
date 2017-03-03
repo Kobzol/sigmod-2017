@@ -31,6 +31,11 @@ static std::vector<Query>* queries;
     static Timer computeTimer;
     static Timer writeResultTimer;
     static Timer ioTimer;
+    Timer insertHashTimer;
+    Timer nfaAddEdgeTimer;
+    Timer createStateTimer;
+    Timer addArcTimer;
+    Timer getArcTimer;
     static double feedTime{0};
     static double addCreateWord{0};
     static double addWordmap{0};
@@ -651,6 +656,11 @@ int main()
     std::cerr << "Split jobs time: " << splitJobsTimer.total << std::endl;
     std::cerr << "Find time: " << computeTimer.total << std::endl;
     std::cerr << "Write result time: " << writeResultTimer.total << std::endl;
+    std::cerr << "Insert hash time: " << insertHashTimer.total << std::endl;
+    std::cerr << "NFA add edge time: " << nfaAddEdgeTimer.total << std::endl;
+    std::cerr << "NFA create state time: " << createStateTimer.total << std::endl;
+    std::cerr << "NFA add arc time: " << addArcTimer.total << std::endl;
+    std::cerr << "NFA get arc time: " << getArcTimer.total << std::endl;
     /*std::cerr << "Feed time: " << feedTime << std::endl;
     std::cerr << "Run time: " << runTimer.total << std::endl;*/
     std::cerr << std::endl;
