@@ -45,6 +45,7 @@ static std::vector<Query>* queries;
     static size_t ngrams_count = 0;
     static size_t addDuplicateCount = 0;
     static size_t removeNonExistentCount = 0;
+    static size_t removeNonExistentTimestampCount = 0;
     static std::atomic<int> duplicateFound{0};
     static std::atomic<int> noDuplicateFound{0};
 
@@ -278,11 +279,11 @@ void delete_ngram(std::string& line, size_t timestamp)
             ngram.deactivate(timestamp);
         }
 #ifdef PRINT_STATISTICS
-        else removeNonExistentCount++;
+        else removeNonExistentTimestampCount++;
 #endif
     }
 #ifdef PRINT_STATISTICS
-    removeNonExistentCount++;
+    else removeNonExistentCount++;
 #endif
 }
 void add_ngram(const std::string& line, size_t timestamp)
@@ -580,6 +581,7 @@ int main()
     std::cerr << "NoDuplicate ngrams found: "<< noDuplicateFound << std::endl;
     std::cerr << "Add duplicate count: "<< addDuplicateCount << std::endl;
     std::cerr << "Remove nonexistent count: "<< removeNonExistentCount << std::endl;
+    std::cerr << "Remove nonexistent timestamp count: "<< removeNonExistentTimestampCount << std::endl;
     std::cerr << "Batch count: " << batch_count << std::endl;
     std::cerr << "Average batch size: " << batch_size / (double) batch_count << std::endl;
     std::cerr << "Average SimpleHashMap bucket size: " << bucketSize / (double) dict->map.capacity << std::endl;
