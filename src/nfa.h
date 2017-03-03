@@ -8,6 +8,7 @@
 #include "util.h"
 #include "simplemap.h"
 #include "timer.h"
+#include "lock.h"
 
 #define NO_ARC ((ssize_t) -1)
 
@@ -120,22 +121,31 @@ public:
 
     }
 
-    ssize_t get_arc_linear(const MapType& input) const
+    CombinedNfaState(const CombinedNfaState& other) // TODO
     {
+
+    }
+
+    ssize_t get_arc_linear(const MapType& input)
+    {
+        //this->lock();
         int size = (int) this->linearMap.size();
         for (int i = 0; i < size; i++)
         {
             if (this->linearMap[i].first == input)
             {
+                //this->unlock();
                 return this->linearMap[i].second;
             }
         }
 
+        //this->unlock();
         return NO_ARC;
     }
 
     void add_arc_linear(const MapType& input, size_t index)
     {
+        //this->lock();
         this->linearMap.emplace_back(input, index);
 
         if (__builtin_expect(this->linearMap.size() > MAX_LINEAR_MAP_SIZE, false))
@@ -149,31 +159,41 @@ public:
             this->get_fn = &CombinedNfaState<MapType>::get_arc_hash;
             this->add_fn = &CombinedNfaState<MapType>::add_arc_hash;
         }
+
+        //this->unlock();
     }
 
-    ssize_t get_arc_hash(const MapType& input) const
+    ssize_t get_arc_hash(const MapType& input)
     {
+        //this->lock();
         auto it = this->hashMap.find(input);
         if (it == this->hashMap.end())
         {
+            //this->unlock();
             return NO_ARC;
         }
 
-        return it->second;
+        volatile ssize_t value = it->second;
+        //this->unlock();
+
+        return value;
     }
 
     void add_arc_hash(const MapType& input, size_t index)
     {
+        //this->lock();
         this->hashMap.insert({input, (unsigned int) index});
+        //this->unlock();
     }
 
     std::vector<std::pair<MapType, unsigned int>> linearMap;
     HashMap<MapType, size_t> hashMap;
 
-    ssize_t (CombinedNfaState<MapType>::*get_fn)(const MapType& input) const;
+    ssize_t (CombinedNfaState<MapType>::*get_fn)(const MapType& input);
     void (CombinedNfaState<MapType>::*add_fn)(const MapType& input, size_t index);
 
     Word word;
+    LOCK_INIT(flag);
 };
 
 template <typename MapType>
@@ -204,26 +224,33 @@ public:
             {
                 visitor.states[nextStateIndex].push_back(arc);
                 NfaStateType<MapType>& nextState = this->states[arc];
+                LOCK(nextState.flag);
                 if (nextState.word.is_active(timestamp))
                 {
                     results.emplace_back(arc, nextState.word.length);
                 }
+                UNLOCK(nextState.flag);
             }
         }
 
         for (ssize_t stateId : visitor.states[currentStateIndex])
         {
             NfaStateType<MapType>& state = this->states[stateId];
+            LOCK(state.flag);
             ssize_t nextStateId = (state.*(state.get_fn))(input);
+            UNLOCK(state.flag);
+
             if (nextStateId != NO_ARC)
             {
                 visitor.states[nextStateIndex].push_back(nextStateId);
 
                 NfaStateType<MapType>& nextState = this->states[nextStateId];
+                LOCK(nextState.flag);
                 if (nextState.word.is_active(timestamp))
                 {
                     results.emplace_back(nextStateId, nextState.word.length);
                 }
+                UNLOCK(nextState.flag);
             }
         }
 
@@ -242,25 +269,32 @@ public:
         {
             visitor.states[nextStateIndex].push_back(arc);
             NfaStateType<MapType>& nextState = this->states[arc];
+            LOCK(nextState.flag);
             if (nextState.word.is_active(timestamp))
             {
                 results.emplace_back(arc, nextState.word.length);
             }
+            UNLOCK(nextState.flag);
         }
 
         for (ssize_t stateId : visitor.states[currentStateIndex])
         {
             NfaStateType<MapType>& state = this->states[stateId];
+            LOCK(state.flag);
             ssize_t nextStateId = (state.*(state.get_fn))(input);
+            UNLOCK(state.flag)
+
             if (nextStateId != NO_ARC)
             {
                 visitor.states[nextStateIndex].push_back(nextStateId);
 
                 NfaStateType<MapType>& nextState = this->states[nextStateId];
+                LOCK(nextState.flag);
                 if (nextState.word.is_active(timestamp))
                 {
                     results.emplace_back(nextStateId, nextState.word.length);
                 }
+                UNLOCK(nextState.flag);
             }
         }
 
@@ -272,7 +306,13 @@ public:
 
     size_t createState()
     {
+        LOCK(this->flag);
         this->states.emplace_back();
-        return this->states.size() - 1;
+        size_t size = this->states.size() - 1;
+        UNLOCK(this->flag);
+
+        return size;
     }
+
+    LOCK_INIT(flag);
 };

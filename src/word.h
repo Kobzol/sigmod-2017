@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <atomic>
 #include "settings.h"
 
 class Word
@@ -25,8 +26,8 @@ public:
         return this->from <= timestamp && timestamp < this->to;
     }
 
-    size_t from;
-    size_t to;
+    std::atomic<size_t> from;   // TODO: check if neededs
+    std::atomic<size_t> to;
     int length;
 };
 

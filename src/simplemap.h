@@ -2,7 +2,9 @@
 
 #include <cstdlib>
 #include <vector>
+#include <atomic>
 #include "settings.h"
+#include "lock.h"
 
 
 template <typename Key, typename Value>
@@ -17,6 +19,14 @@ public:
 
     Key key;
     Value value;
+};
+
+template <typename T>
+class SimpleMapRow
+{
+public:
+    std::vector<T> items;
+    LOCK_INIT(flag);
 };
 
 inline size_t fnv(const std::string& string)
@@ -170,14 +180,14 @@ class SimpleMapChained
 public:
     SimpleMapChained(size_t capacity, int preallocate = 0) : capacity(capacity), count(0)
     {
-        this->nodes = new std::vector<SimpleMapNode<Key, Value>>[capacity];
+        this->nodes = new SimpleMapRow<SimpleMapNode<Key, Value>>[capacity];
         this->bitCapacity = capacity - 1;
 
         if (preallocate > 0)
         {
             for (size_t i = 0; i < this->capacity; i++)
             {
-                this->nodes[i].reserve(preallocate);
+                this->nodes[i].items.reserve(preallocate);
             }
         }
     }
@@ -196,45 +206,64 @@ public:
     {
         size_t hash = fnv(key) & this->bitCapacity;
 
-        this->nodes[hash].emplace_back(key, value);
+        LOCK(this->nodes[hash].flag);
+        this->nodes[hash].items.emplace_back(key, value);
+        UNLOCK(this->nodes[hash].flag);
         this->count++;
     }
     void insert_hash(const Key& key, Value value, size_t hash)
     {
         hash = hash & this->bitCapacity;
 
-        this->nodes[hash].emplace_back(key, value);
+        LOCK(this->nodes[hash].flag);
+        this->nodes[hash].items.emplace_back(key, value);
+        UNLOCK(this->nodes[hash].flag);
         this->count++;
     }
     Value get(const Key& key) const
     {
         size_t hash = fnv(key) & this->bitCapacity;
 
-        std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
-        SimpleMapNode<Key, Value>* start = node.data();
-        SimpleMapNode<Key, Value>* end = start + node.size();
+        SimpleMapRow<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
+        LOCK(node.flag);
+
+        SimpleMapNode<Key, Value>* start = node.items.data();
+        SimpleMapNode<Key, Value>* end = start + node.items.size();
 
         while (start < end)
         {
-            if (start->key == key) return start->value;
+            if (start->key == key)
+            {
+                UNLOCK(node.flag);
+                return start->value;
+            }
             start++;
         }
 
+        UNLOCK(node.flag);
         return HASH_NOT_FOUND;
     }
     Value get_hash(const Key& key, size_t hash) const
     {
         hash = hash & this->bitCapacity;
 
-        std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
-        SimpleMapNode<Key, Value>* start = node.data();
-        SimpleMapNode<Key, Value>* end = start + node.size();
+        SimpleMapRow<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
+        LOCK(node.flag);
+
+        SimpleMapNode<Key, Value>* start = node.items.data();
+        SimpleMapNode<Key, Value>* end = start + node.items.size();
 
         while (start < end)
         {
-            if (start->key == key) return start->value;
+            if (start->key == key)
+            {
+                UNLOCK(node.flag);
+                return start->value;
+            }
             start++;
         }
+
+        UNLOCK(node.flag);
 
         return HASH_NOT_FOUND;
     }
@@ -242,17 +271,25 @@ public:
     {
         hash = hash & this->bitCapacity;
 
-        std::vector<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
-        SimpleMapNode<Key, Value>* start = node.data();
-        SimpleMapNode<Key, Value>* end = start + node.size();
+        SimpleMapRow<SimpleMapNode<Key, Value>>& node = this->nodes[hash];
+        LOCK(node.flag);
+
+        SimpleMapNode<Key, Value>* start = node.items.data();
+        SimpleMapNode<Key, Value>* end = start + node.items.size();
 
         while (start < end)
         {
-            if (start->key == key) return start->value;
+            if (start->key == key)
+            {
+                UNLOCK(node.flag);
+                return start->value;
+            }
             start++;
         }
 
-        node.emplace_back(key, value);
+        node.items.emplace_back(key, value);
+        UNLOCK(node.flag);
+
         this->count++;
         return value;
     }
@@ -262,8 +299,8 @@ public:
         return this->count;
     }
 
-    std::vector<SimpleMapNode<Key, Value>>* nodes;
+    SimpleMapRow<SimpleMapNode<Key, Value>>* nodes;
     size_t capacity;
     size_t bitCapacity;
-    size_t count;
+    std::atomic<size_t> count{0};
 };

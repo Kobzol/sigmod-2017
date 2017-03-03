@@ -22,12 +22,15 @@ class Dictionary
 public:
     Dictionary() : map(DICTIONARY_HASH_MAP_SIZE)
     {
-        this->prefix.reserve(1000);
+
     }
 
     inline DictHash insert(const std::string& word, size_t wordHash)
     {
-        return this->map.get_or_insert_hash(word, wordHash, this->map.size());
+        LOCK(this->insertFlag);
+        DictHash value = this->map.get_or_insert_hash(word, wordHash, this->map.size());
+        UNLOCK(this->insertFlag);
+        return value;
     }
 
     template <typename MapType>
@@ -38,6 +41,7 @@ public:
         size_t prefixHash;
         HASH_INIT(prefixHash);
         size_t i = start;
+        std::string prefix;
 
         for (; i < size; i++)
         {
@@ -46,27 +50,29 @@ public:
 
             if (__builtin_expect(c == ' ', false))
             {
-                DictHash hash = this->insert(this->prefix, prefixHash);
+                DictHash hash = this->insert(prefix, prefixHash);
                 this->nfaAddEdgeRoot(nfa, hash, activeState);
-                this->prefix.clear();
+                prefix.clear();
                 HASH_INIT(prefixHash);
                 i++;
                 break;
             }
             else
             {
-                this->prefix += c;
+                prefix += c;
                 HASH_UPDATE(prefixHash, c);
             }
         }
 
         if (activeState == 0)
         {
-            this->nfaAddEdgeRoot(nfa, this->insert(this->prefix, prefixHash), activeState);
+            this->nfaAddEdgeRoot(nfa, this->insert(prefix, prefixHash), activeState);
+            LOCK(nfa.states[activeState].flag);
             nfa.states[activeState].word.from = timestamp;
             nfa.states[activeState].word.to = UINT32_MAX;
             nfa.states[activeState].word.length = word.size() - start;
-            this->prefix.clear();
+            UNLOCK(nfa.states[activeState].flag);
+            prefix.clear();
 
             return (size_t) activeState;
         }
@@ -78,25 +84,28 @@ public:
 
             if (__builtin_expect(c == ' ', false))
             {
-                DictHash hash = this->insert(this->prefix, prefixHash);
+                DictHash hash = this->insert(prefix, prefixHash);
                 this->nfaAddEdgeNoRoot(nfa, hash, activeState);
-                this->prefix.clear();
+                prefix.clear();
                 HASH_INIT(prefixHash);
             }
             else
             {
-                this->prefix += c;
+                prefix += c;
                 HASH_UPDATE(prefixHash, c);
             }
         }
 
-        DictHash hash = this->insert(this->prefix, prefixHash);
+        DictHash hash = this->insert(prefix, prefixHash);
         this->nfaAddEdgeNoRoot(nfa, hash, activeState);
 
+        LOCK(nfa.states[activeState].flag);
         nfa.states[activeState].word.from = timestamp;
         nfa.states[activeState].word.to = UINT32_MAX;
         nfa.states[activeState].word.length = word.size() - start;
-        this->prefix.clear();
+        UNLOCK(nfa.states[activeState].flag);
+
+        prefix.clear();
 
         return (size_t) activeState;
     }
@@ -116,12 +125,19 @@ public:
     template <typename MapType>
     void nfaAddEdgeNoRoot(Nfa<MapType>& nfa, DictHash hash, ssize_t& activeState)
     {
-        ssize_t arc = (nfa.states[activeState].*(nfa.states[activeState].get_fn))(hash);
+        auto& state = nfa.states[activeState];
+        LOCK(state.flag);
+        ssize_t arc = (state.*(state.get_fn))(hash);
+        UNLOCK(state.flag);
+
         if (arc == NO_ARC)
         {
             size_t stateId = nfa.createState();
-            NfaStateType<MapType>& state = nfa.states[activeState];
-            (state.*(state.add_fn))(hash, stateId);
+            NfaStateType<MapType>& nextState = nfa.states[activeState];
+            LOCK(nextState.flag);
+            (nextState.*(nextState.add_fn))(hash, stateId);
+            UNLOCK(nextState.flag);
+
             activeState = stateId;
         }
         else activeState = arc;
@@ -191,11 +207,6 @@ public:
         }
     }
 
-    size_t size()
-    {
-        return this->map.size();
-    }
-
-    std::string prefix;
-    SimpleMap<std::string, DictHash> map;
+    SimpleMapChained<std::string, DictHash> map;
+    LOCK_INIT(insertFlag);
 };

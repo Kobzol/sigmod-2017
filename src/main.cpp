@@ -7,17 +7,27 @@
 #include <atomic>
 #include <omp.h>
 #include <unistd.h>
+#include <thread>
+#include <chrono>
 
 #include "settings.h"
 #include "word.h"
 #include "dictionary.h"
 #include "query.h"
 #include "timer.h"
+#include "job.h"
+#include "thread.h"
 
 static Dictionary* dict;
-static SimpleMap<std::string, DictHash>* wordMap;
+static SimpleMapChained<std::string, DictHash>* wordMap;
 static Nfa<size_t>* nfa;
 static std::vector<Query>* queries;
+JobQueue jobQueue;
+ThreadPool threadPool;
+
+static std::vector<Job> deleteJobs;
+
+using namespace std::literals::chrono_literals;
 
 #ifdef PRINT_STATISTICS
     static std::atomic<int> calcCount{0};
@@ -294,8 +304,11 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
 #endif
 }
 
+static LOCK_INIT(deleteFlag);
+
 void delete_ngram(std::string& line, size_t timestamp)
 {
+    LOCK(deleteFlag);
     line[0] = 'A';
     DictHash index = wordMap->get(line);
     if (index != HASH_NOT_FOUND)
@@ -306,6 +319,7 @@ void delete_ngram(std::string& line, size_t timestamp)
             ngram.deactivate(timestamp);
         }
     }
+    UNLOCK(deleteFlag);
 }
 void add_ngram(const std::string& line, size_t timestamp)
 {
@@ -473,6 +487,17 @@ void batch(size_t& queryIndex)
     }
     else
     {
+        while (!jobQueue.is_finished())
+        {
+            std::this_thread::sleep_for(1ms);
+        }
+
+        for (auto& job : deleteJobs)
+        {
+            delete_ngram(job.data, job.timestamp);
+        }
+        deleteJobs.clear();
+
         #pragma omp parallel for schedule(dynamic)
         for (size_t i = 0; i < queryIndex; i++)
         {
@@ -501,12 +526,13 @@ void batch(size_t& queryIndex)
     batchTimer.add();
 #endif
     queryIndex = 0;
+    jobQueue.start_batch();
 }
 
 void init(std::istream& input)
 {
     dict = new Dictionary();
-    wordMap = new SimpleMap<std::string, DictHash>(WORDMAP_HASH_SIZE);
+    wordMap = new SimpleMapChained<std::string, DictHash>(WORDMAP_HASH_SIZE);
     nfa = new Nfa<size_t>();
     ioResult.reserve(100000);
 
@@ -569,7 +595,7 @@ int main()
 #ifdef PRINT_STATISTICS
             addTimer.start();
 #endif
-            add_ngram(line, timestamp);
+            jobQueue.add_query(timestamp, JOBTYPE_ADD, line);
 
 #ifdef PRINT_STATISTICS
             addTimer.add();
@@ -580,7 +606,9 @@ int main()
 #ifdef PRINT_STATISTICS
             deleteTimer.start();
 #endif
-            delete_ngram(line, timestamp);
+            //delete_ngram(line, timestamp);
+            //jobQueue.add_query(timestamp, JOBTYPE_DELETE, line);
+            deleteJobs.emplace_back(timestamp, JOBTYPE_DELETE, line);
 
 #ifdef PRINT_STATISTICS
             deleteTimer.add();
