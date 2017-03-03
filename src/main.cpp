@@ -41,6 +41,12 @@ static std::vector<Query>* queries;
     static double feedTime{0};
     static double addCreateWord{0};
     static double addWordMap{0};
+    static size_t init_ngrams = 0;
+    static size_t ngrams_count = 0;
+    static size_t addDuplicateCount = 0;
+    static size_t removeNonExistentCount = 0;
+    static std::atomic<int> duplicateFound{0};
+    static std::atomic<int> noDuplicateFound{0};
 
     static int additions = 0, deletions = 0, query_count = 0;
     static size_t query_length = 0, ngram_length = 0, document_word_count = 0;
@@ -84,6 +90,8 @@ void load_init_data(std::istream& input)
             size_t index = dict->createWordNfa(line, 0, *nfa, 0, prefixHash);
             (*wordMap).insert("A " + line, (DictHash)(index));
 #ifdef PRINT_STATISTICS
+            init_ngrams++;
+            ngrams_count++;
             updateNgramStats(line);
 #endif
         }
@@ -173,6 +181,7 @@ void find_in_document(Query& query)
                     {
                         found.insert(wordInfo.first);
 #ifdef PRINT_STATISTICS
+                        noDuplicateFound++;
                         Timer stringTimer;
                         stringTimer.start();
 #endif
@@ -181,6 +190,9 @@ void find_in_document(Query& query)
                         stringCreateTime += stringTimer.get();
 #endif
                     }
+#ifdef PRINT_STATISTICS
+                    else duplicateFound++;
+#endif
                 }
                 indices.clear();
 #ifdef PRINT_STATISTICS
@@ -265,12 +277,20 @@ void delete_ngram(std::string& line, size_t timestamp)
         {
             ngram.deactivate(timestamp);
         }
+#ifdef PRINT_STATISTICS
+        else removeNonExistentCount++;
+#endif
     }
+#ifdef PRINT_STATISTICS
+    removeNonExistentCount++;
+#endif
 }
 void add_ngram(const std::string& line, size_t timestamp)
 {
 #ifdef PRINT_STATISTICS
+    ngrams_count++;
     Timer addTimer;
+    addTimer.start();
 #endif
     size_t wordHash;
     HASH_INIT(wordHash);
@@ -280,6 +300,12 @@ void add_ngram(const std::string& line, size_t timestamp)
     size_t index = dict->createWordNfa<size_t>(line, 2, *nfa, timestamp, wordHash);
 #ifdef PRINT_STATISTICS
     addCreateWord += addTimer.get();
+
+    if ((*wordMap).get(line) != HASH_NOT_FOUND)
+    {
+        addDuplicateCount++;
+    }
+
     addTimer.start();
 #endif
     (*wordMap).insert_hash(line, (DictHash) index, wordHash);
@@ -534,29 +560,29 @@ int main()
         bucketSize += dict->map.nodes[i].size();
     }
 
-    /*std::cerr << "Initial ngrams: " << init_ngrams << std::endl;
+    std::cerr << "Initial ngrams: " << init_ngrams << std::endl;
     std::cerr << "Additions: " << additions << std::endl;
     std::cerr << "Deletions: " << deletions << std::endl;
     std::cerr << "Queries: " << query_count << std::endl;
     std::cerr << "Average document length: " << query_length / (double) query_count << std::endl;
     std::cerr << "Average document word count: " << document_word_count / (double) query_count << std::endl;
     std::cerr << "Average document word length: " << total_word_length / document_word_count << std::endl;
-    std::cerr << "Average ngram length: " << ngram_length / (double) ngrams.size() << std::endl;
-    std::cerr << "Average ngram word count: " << ngram_word_count / (double) ngrams.size() << std::endl;
+    std::cerr << "Average ngram length: " << ngram_length / (double) ngrams_count << std::endl;
+    std::cerr << "Average ngram word count: " << ngram_word_count / (double) ngrams_count << std::endl;
     std::cerr << "Average ngram word length: " << ngram_word_length / ngram_word_count << std::endl;
     std::cerr << "Average result length: " << result_length / (double) query_count << std::endl;
-    std::cerr << "Average prefix ngram count: " << prefix_count / prefixCounter.size() << std::endl;
     std::cerr << "Average NFA visitor state count: " << nfaStateCount / (double) nfaIterationCount << std::endl;
-    std::cerr << "NFA root state edge count: " << nfa.rootState.get_size() << std::endl;
-    std::cerr << "Average NFA state edge count: " << nfaEdgeCount / (double) (nfa.states.size() - 1) << std::endl;
+    std::cerr << "NFA root state edge count: " << nfa->rootState.get_size() << std::endl;
+    std::cerr << "Average NFA state edge count: " << nfaEdgeCount / (double) (nfa->states.size() - 1) << std::endl;
     std::cerr << "Hash found: " << hashFound << std::endl;
     std::cerr << "Hash not found: " << hashNotFound << std::endl;
-    std::cerr << "Inactive ngrams found: " << noActiveFound << std::endl;
-    std::cerr << "Duplicate ngrams found: " << duplicateNgramFound << std::endl;
+    std::cerr << "Duplicate ngrams found: " << duplicateFound << std::endl;
     std::cerr << "NoDuplicate ngrams found: "<< noDuplicateFound << std::endl;
+    std::cerr << "Add duplicate count: "<< addDuplicateCount << std::endl;
+    std::cerr << "Remove nonexistent count: "<< removeNonExistentCount << std::endl;
     std::cerr << "Batch count: " << batch_count << std::endl;
     std::cerr << "Average batch size: " << batch_size / (double) batch_count << std::endl;
-    std::cerr << "Average SimpleHashMap bucket size: " << bucketSize / (double) dict->map.capacity << std::endl;*/
+    std::cerr << "Average SimpleHashMap bucket size: " << bucketSize / (double) dict->map.capacity << std::endl;
     std::cerr << "Calc time: " << calcCount << std::endl;
     std::cerr << "Sort time: " << sortCount << std::endl;
     std::cerr << "String recreate time: " << stringCreateTime << std::endl;
