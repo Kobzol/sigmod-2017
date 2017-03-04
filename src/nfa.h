@@ -3,6 +3,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
+#include <algorithm>
 
 #include "word.h"
 #include "util.h"
@@ -13,6 +14,18 @@
 
 extern ssize_t* linearMap;
 void initLinearMap();
+
+template <typename MapType>
+struct Mapping
+{
+    Mapping(MapType key, unsigned int value) : key(key), value(value)
+    {
+
+    }
+
+    MapType key;
+    unsigned int value;
+};
 
 class NfaVisitor
 {
@@ -85,29 +98,23 @@ public:
 
     ssize_t get_arc(const MapType& input) const
     {
-        int size = (int) this->keys.size();
-        for (int i = 0; i < size; i++)
-        {
-            if (this->keys[i].first == input)
-            {
-                return this->keys[i].second;
-            }
-        }
-
-        return NO_ARC;
+        auto it = std::lower_bound(this->keys.begin(), this->keys.end(), input, [](const Mapping<MapType>& i1, const MapType& value) {
+            return i1.key < value;
+        });
+        if (it == this->keys.end() || it->key != input) return NO_ARC;
+        return it->value;
     }
 
     void add_arc(const MapType& input, size_t index)
     {
-        this->keys.emplace_back(input, index);
+        auto it = std::lower_bound(this->keys.begin(), this->keys.end(), input, [](const Mapping<MapType>& i1, const MapType& value) {
+            return i1.key < value;
+        });
+        this->keys.insert(it, Mapping<MapType>(input, index));
     }
 
-    size_t get_size() const
-    {
-        return this->keys.size();
-    }
-
-    std::vector<std::pair<MapType, unsigned int>> keys;
+    std::vector<Mapping<MapType>> keys;
+    Word word;
 };
 
 template <typename MapType>
@@ -177,7 +184,7 @@ public:
 };
 
 template <typename MapType>
-using NfaStateType = CombinedNfaState<MapType>;
+using NfaStateType = LinearNfaState<MapType>;
 
 template <typename MapType>
 class Nfa
@@ -214,7 +221,7 @@ public:
         for (ssize_t stateId : visitor.states[currentStateIndex])
         {
             NfaStateType<MapType>& state = this->states[stateId];
-            ssize_t nextStateId = (state.*(state.get_fn))(input);
+            ssize_t nextStateId = state.get_arc(input);
             if (nextStateId != NO_ARC)
             {
                 visitor.states[nextStateIndex].push_back(nextStateId);
@@ -251,7 +258,7 @@ public:
         for (ssize_t stateId : visitor.states[currentStateIndex])
         {
             NfaStateType<MapType>& state = this->states[stateId];
-            ssize_t nextStateId = (state.*(state.get_fn))(input);
+            ssize_t nextStateId = state.get_arc(input);
             if (nextStateId != NO_ARC)
             {
                 visitor.states[nextStateIndex].push_back(nextStateId);

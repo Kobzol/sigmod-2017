@@ -47,7 +47,7 @@ public:
             if (__builtin_expect(c == ' ', false))
             {
                 DictHash hash = this->insert(this->prefix, prefixHash);
-                this->nfaAddEdgeRoot(nfa, hash, activeState);
+                this->nfaAddEdge(nfa, hash, activeState);
                 this->prefix.clear();
                 HASH_INIT(prefixHash);
                 i++;
@@ -62,7 +62,7 @@ public:
 
         if (activeState == 0)
         {
-            this->nfaAddEdgeRoot(nfa, this->insert(this->prefix, prefixHash), activeState);
+            this->nfaAddEdge(nfa, this->insert(this->prefix, prefixHash), activeState);
             nfa.states[activeState].word.from = timestamp;
             nfa.states[activeState].word.to = UINT32_MAX;
             nfa.states[activeState].word.length = word.size() - start;
@@ -79,7 +79,7 @@ public:
             if (__builtin_expect(c == ' ', false))
             {
                 DictHash hash = this->insert(this->prefix, prefixHash);
-                this->nfaAddEdgeNoRoot(nfa, hash, activeState);
+                this->nfaAddEdge(nfa, hash, activeState);
                 this->prefix.clear();
                 HASH_INIT(prefixHash);
             }
@@ -91,7 +91,7 @@ public:
         }
 
         DictHash hash = this->insert(this->prefix, prefixHash);
-        this->nfaAddEdgeNoRoot(nfa, hash, activeState);
+        this->nfaAddEdge(nfa, hash, activeState);
 
         nfa.states[activeState].word.from = timestamp;
         nfa.states[activeState].word.to = UINT32_MAX;
@@ -121,7 +121,7 @@ public:
         {
             size_t stateId = nfa.createState();
             NfaStateType<MapType>& state = nfa.states[activeState];
-            (state.*(state.add_fn))(hash, stateId);
+            state.add_arc(hash, stateId);
             activeState = stateId;
         }
         else activeState = arc;
@@ -164,7 +164,8 @@ public:
 #ifdef PRINT_STATISTICS
             getArcTimer.start();
 #endif
-            arc = (nfa.states[activeState].*(nfa.states[activeState].get_fn))(hash);
+            auto& state = nfa.states[activeState];
+            arc = state.get_arc(hash);
 #ifdef PRINT_STATISTICS
             getArcTimer.add();
 #endif
@@ -177,11 +178,11 @@ public:
 #ifdef PRINT_STATISTICS
                 createStateTimer.add();
 #endif
-                NfaStateType<MapType>& state = nfa.states[activeState];
+                NfaStateType<MapType>& nextState = nfa.states[activeState];
 #ifdef PRINT_STATISTICS
                 addArcTimer.start();
 #endif
-                (state.*(state.add_fn))(hash, stateId);
+                nextState.add_arc(hash, stateId);
 #ifdef PRINT_STATISTICS
                 addArcTimer.add();
 #endif
