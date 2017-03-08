@@ -1,3 +1,4 @@
+/*
 #pragma once
 
 #include <unordered_map>
@@ -200,3 +201,4 @@ public:
     std::string prefix;
     SimpleMap<std::string, DictHash> map;
 };
+*/

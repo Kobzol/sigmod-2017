@@ -11,7 +11,7 @@ public:
     {
 
     }
-    Word(size_t from, int length): from(from), to(UINT32_MAX), length(length)
+    Word(size_t from, const std::string& data): from(from), to(UINT32_MAX), data(data), length(data.size() - 2)
     {
 
     }
@@ -27,7 +27,8 @@ public:
 
     size_t from;
     size_t to;
-    int length;
+    std::string data;
+    unsigned int length;
 };
 
 class Match

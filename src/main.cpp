@@ -12,12 +12,14 @@
 #include "word.h"
 #include "dictionary.h"
 #include "query.h"
+#include "nfa.h"
 #include "timer.h"
 
-static Dictionary* dict;
+
 static SimpleMap<std::string, DictHash>* wordMap;
-static Nfa<size_t>* nfa;
 static std::vector<Query>* queries;
+static Nfa* nfa;
+static std::vector<Word> words;
 
 #ifdef PRINT_STATISTICS
     static std::atomic<int> calcCount{0};
@@ -40,26 +42,6 @@ static std::vector<Query>* queries;
     static double addWordmap{0};
 #endif
 
-void load_init_data(std::istream& input)
-{
-    while (true)
-    {
-        std::string line;
-        std::getline(input, line);
-
-        if (line == "S")
-        {
-            break;
-        }
-        else
-        {
-            size_t prefixHash;
-            size_t index = dict->createWordNfa(line, 0, *nfa, 0, prefixHash);
-            (*wordMap).insert("A " + line, (DictHash)(index));
-        }
-    }
-}
-
 bool ends_with(std::string const &fullString, std::string const &ending) {
     if (fullString.length() >= ending.length()) {
         return (0 == fullString.compare (fullString.length() - ending.length(), ending.length(), ending));
@@ -79,75 +61,46 @@ void loadWord(int from, int length, std::string& target, const std::string& sour
 void find_in_document(Query& query)
 {
     std::vector<Match> matches;
-    std::unordered_set<unsigned int> found;
+    std::unordered_set<int> found;
     size_t timestamp = query.timestamp;
 
+    std::string& line = query.document;
+    line += ' ';
+    int size = (int) query.document.size();
+
+    std::string ngram;
     NfaVisitor visitor;
 
-#ifdef PRINT_STATISTICS
-    Timer timer;
-    timer.start();
-#endif
+    visitor.states[visitor.stateIndex].emplace_back(0, 0);
 
-    std::vector<std::pair<unsigned int, unsigned int>> indices; // id, length
-    int size = (int) query.document.size();
-    std::string& line = query.document;
-    std::string prefix;
-    size_t prefixHash;
-    HASH_INIT(prefixHash);
-    int i = 2;
-
-    for (; i < size; i++)
+    for (int i = 2; i < size; i++)
     {
         char c = line[i];
+
         if (__builtin_expect(c == ' ', false))
         {
-            DictHash hash = dict->map.get_hash(prefix, prefixHash);
-            if (__builtin_expect(hash != HASH_NOT_FOUND, true))
+            for (auto& mapping : visitor.states[visitor.stateIndex])
             {
-                nfa->feedWordWithInitial(visitor, hash, indices, timestamp);
-                for (auto wordInfo : indices)
+                CombinedNfaState& state = nfa->states[mapping.state];
+                int wordIndex = state.wordIndex;
+                if (wordIndex != NO_WORD)
                 {
-                    if (found.find(wordInfo.first) == found.end())
+                    Word& word = words[wordIndex];
+                    if (word.is_active(timestamp) && found.find(wordIndex) == found.end())
                     {
-                        found.insert(wordInfo.first);
-                        matches.emplace_back(i - wordInfo.second, wordInfo.second);
+                        found.insert(wordIndex);
+                        matches.emplace_back(i - word.length, word.length);
                     }
                 }
-                indices.clear();
             }
-            else
-            {
-                visitor.states[visitor.stateIndex].clear();
-            }
-
-            HASH_INIT(prefixHash);
-            prefix.clear();
         }
-        else
+        nfa->feedWord(visitor, c);
+
+        if (__builtin_expect(c == ' ', false))
         {
-            prefix += c;
-            HASH_UPDATE(prefixHash, c);
+            visitor.states[visitor.stateIndex].emplace_back(0, 0);
         }
     }
-
-    DictHash hash = dict->map.get_hash(prefix, prefixHash);
-    if (hash != HASH_NOT_FOUND)
-    {
-        nfa->feedWordWithInitial(visitor, hash, indices, timestamp);
-        for (auto wordInfo : indices)
-        {
-            if (found.find(wordInfo.first) == found.end())
-            {
-                matches.emplace_back(i - wordInfo.second, wordInfo.second);
-            }
-        }
-    }
-
-#ifdef PRINT_STATISTICS
-    calcCount += timer.get();
-    timer.reset();
-#endif
 
     std::sort(matches.begin(), matches.end(), [](Match& m1, Match& m2)
     {
@@ -155,11 +108,6 @@ void find_in_document(Query& query)
         else if (m1.index > m2.index) return false;
         else return m1.length <= m2.length;
     });
-
-#ifdef PRINT_STATISTICS
-    sortCount += timer.get();
-    timer.reset();
-#endif
 
     if (matches.size() == 0)
     {
@@ -173,125 +121,6 @@ void find_in_document(Query& query)
         query.result += '|';
         loadWord(match.index, match.length, query.result, query.document);
     }
-
-#ifdef PRINT_STATISTICS
-    writeStringCount += timer.get();
-#endif
-}
-void find_in_document(Query& query, int from, int to, std::vector<std::string>& result)
-{
-    std::vector<Match> matches;
-    std::unordered_set<unsigned int> found;
-    size_t timestamp = query.timestamp;
-
-    NfaVisitor visitor;
-
-#ifdef PRINT_STATISTICS
-    Timer timer;
-    timer.start();
-#endif
-
-    std::vector<std::pair<unsigned int, unsigned int>> indices; // id, length
-    int size = (int) query.document.size();
-    std::string& line = query.document;
-    std::string prefix;
-    size_t prefixHash;
-    HASH_INIT(prefixHash);
-
-    if (line[from - 1] != ' ' && line[from] != ' ')
-    {
-        while (from < size && line[from] != ' ') from++;
-        if (from >= size) return;
-    }
-    if (line[from] == ' ') from++;
-
-    bool checkAfter = true;
-    bool startNewWords = true;
-
-    int i = from;
-    for (; i < size; i++)
-    {
-        char c = line[i];
-        if (__builtin_expect(c == ' ', false))
-        {
-            DictHash hash = dict->map.get_hash(prefix, prefixHash);
-            if (__builtin_expect(hash != HASH_NOT_FOUND, true))
-            {
-                nfa->feedWord(visitor, hash, indices, timestamp, startNewWords);
-                for (auto wordInfo : indices)
-                {
-                    if (found.find(wordInfo.first) == found.end())
-                    {
-                        found.insert(wordInfo.first);
-
-                        matches.emplace_back(i - wordInfo.second, wordInfo.second);
-                    }
-                }
-                indices.clear();
-            }
-            else visitor.states[visitor.stateIndex].clear();
-
-            if (i >= to && visitor.states[visitor.stateIndex].empty())
-            {
-                checkAfter = false;
-                break;
-            }
-
-            HASH_INIT(prefixHash);
-            prefix.clear();
-
-            startNewWords = i < to;
-        }
-        else
-        {
-            prefix += c;
-            HASH_UPDATE(prefixHash, c);
-        }
-    }
-
-    if (checkAfter)
-    {
-        DictHash hash = dict->map.get_hash(prefix, prefixHash);
-        if (hash != HASH_NOT_FOUND)
-        {
-            nfa->feedWord(visitor, hash, indices, timestamp, startNewWords);
-            for (auto wordInfo : indices)
-            {
-                if (found.find(wordInfo.first) == found.end())
-                {
-                    matches.emplace_back(i - wordInfo.second, wordInfo.second);
-                }
-            }
-        }
-    }
-
-#ifdef PRINT_STATISTICS
-    calcCount += timer.get();
-    timer.reset();
-#endif
-
-    std::sort(matches.begin(), matches.end(), [](Match& m1, Match& m2)
-    {
-        if (m1.index < m2.index) return true;
-        else if (m1.index > m2.index) return false;
-        else return m1.length <= m2.length;
-    });
-
-#ifdef PRINT_STATISTICS
-    sortCount += timer.get();
-    timer.reset();
-#endif
-
-    for (size_t i = 0; i < matches.size(); i++)
-    {
-        Match& match = matches[i];
-        result.emplace_back();
-        loadWord(match.index, match.length, result[result.size() - 1], query.document);
-    }
-
-#ifdef PRINT_STATISTICS
-    writeStringCount += timer.get();
-#endif
 }
 
 void delete_ngram(std::string& line, size_t timestamp)
@@ -300,7 +129,7 @@ void delete_ngram(std::string& line, size_t timestamp)
     DictHash index = wordMap->get(line);
     if (index != HASH_NOT_FOUND)
     {
-        Word& ngram = nfa->states[index].word;
+        Word& ngram = words[index];
         if (ngram.is_active(timestamp))
         {
             ngram.deactivate(timestamp);
@@ -309,24 +138,10 @@ void delete_ngram(std::string& line, size_t timestamp)
 }
 void add_ngram(const std::string& line, size_t timestamp)
 {
-#ifdef PRINT_STATISTICS
-    Timer addTimer;
-    addTimer.start();
-#endif
-    size_t wordHash;
-    HASH_INIT(wordHash);
-    HASH_UPDATE(wordHash, 'A');
-    HASH_UPDATE(wordHash, ' ');
-
-    size_t index = dict->createWordNfa<size_t>(line, 2, *nfa, timestamp, wordHash);
-#ifdef PRINT_STATISTICS
-    addCreateWord += addTimer.get();
-    addTimer.start();
-#endif
-    (*wordMap).insert_hash(line, (DictHash) index, wordHash);
-#ifdef PRINT_STATISTICS
-    addWordmap += addTimer.get();
-#endif
+    words.emplace_back(timestamp, line);
+    size_t index = words.size() - 1;
+    (*wordMap).insert(line, index);
+    nfa->addWord(line, 2, index);
 }
 void query(size_t& queryIndex, size_t timestamp)
 {
@@ -339,139 +154,12 @@ void query(size_t& queryIndex, size_t timestamp)
     }
 }
 
-static std::string ioResult;
-void batch_split(size_t queryIndex)
-{
-#ifdef PRINT_STATISTICS
-    splitJobsTimer.start();
-#endif
-    if (queryIndex < 1) return;
-
-    size_t total_size = 0;
-    for (size_t i = 0; i < queryIndex; i++)
-    {
-        total_size += (*queries)[i].document.size() - 2;
-    }
-
-    size_t workerPart = std::max(JOB_SPLIT_SIZE, static_cast<size_t>(std::ceil(total_size / (double) THREAD_COUNT)));
-    std::vector<QueryRegion> regions;
-    size_t queryId = 0;
-    size_t from = 2;
-    size_t sum = 0;
-
-    while (queryId < queryIndex)
-    {
-        size_t leftInQuery = (*queries)[queryId].document.size() - from;
-        if (leftInQuery == 0)
-        {
-            from = 2;
-            queryId++;
-        }
-        else
-        {
-            size_t leftInQueryWorker = std::min(leftInQuery, workerPart);
-            regions.emplace_back(queryId, from, from + leftInQueryWorker);
-            sum += leftInQueryWorker;
-            from += leftInQueryWorker;
-        }
-    }
-
-#ifdef PRINT_STATISTICS
-    splitJobsTimer.add();
-    computeTimer.start();
-#endif
-
-    // do queries in parallel
-    #pragma omp parallel for schedule(dynamic)
-    for (size_t i = 0; i < regions.size(); i++)
-    {
-        QueryRegion& region = regions[i];
-        find_in_document((*queries)[region.queryIndex], region.from, region.to, region.result);
-    }
-
-    // print results
-#ifdef PRINT_STATISTICS
-    computeTimer.add();
-    writeResultTimer.start();
-#endif
-
-    int lastQueryId = 0;
-    bool queryFirst = true;
-    bool queryOutputted = false;
-    std::unordered_set<std::string> found;
-    for (size_t i = 0; i < regions.size(); i++)
-    {
-        QueryRegion& region = regions[i];
-        if (region.queryIndex != lastQueryId)
-        {
-            if (!queryOutputted)
-            {
-                ioResult += "-1\n";
-            }
-            else ioResult += '\n';
-
-            lastQueryId = region.queryIndex;
-            queryOutputted = false;
-            queryFirst = true;
-            found.clear();
-        }
-
-        if (region.result.size() > 0)
-        {
-            bool firstFound = found.find(region.result[0]) == found.end();
-
-            if (queryFirst)
-            {
-                queryFirst = false;
-            }
-            else if (firstFound)
-            {
-                ioResult += '|';
-            }
-
-            if (firstFound)
-            {
-                ioResult += region.result[0];
-                found.insert(region.result[0]);
-            }
-
-            for (size_t str = 1; str < region.result.size(); str++)
-            {
-                if (found.find(region.result[str]) == found.end())
-                {
-                    found.insert(region.result[str]);
-                    ioResult += '|';
-                    ioResult += region.result[str];
-                }
-            }
-
-            queryOutputted = true;
-        }
-    }
-
-    if (!queryOutputted)
-    {
-        ioResult += "-1\n";
-    }
-    else ioResult += '\n';
-
-    write(STDOUT_FILENO, ioResult.c_str(), ioResult.size());
-    ioResult.clear();
-
-#ifdef PRINT_STATISTICS
-    writeResultTimer.add();
-#endif
-}
 void batch(size_t& queryIndex)
 {
 #ifdef PRINT_STATISTICS
     batchTimer.start();
+    computeTimer.start();
 #endif
-    if (false)//queryIndex <= THREAD_COUNT)
-    {
-        batch_split(queryIndex);
-    }
-    else
     {
         #pragma omp parallel for schedule(dynamic)
         for (size_t i = 0; i < queryIndex; i++)
@@ -503,18 +191,34 @@ void batch(size_t& queryIndex)
     queryIndex = 0;
 }
 
+void load_init_data(std::istream& input)
+{
+    while (true)
+    {
+        std::string line;
+        std::getline(input, line);
+
+        if (line == "S")
+        {
+            break;
+        }
+        else
+        {
+            words.emplace_back(0, "A " + line);
+            size_t index = words.size() - 1;
+            (*wordMap).insert("A " + line, index);
+            nfa->addWord(line, 0, index);
+        }
+    }
+}
 void init(std::istream& input)
 {
-    dict = new Dictionary();
     wordMap = new SimpleMap<std::string, DictHash>(WORDMAP_HASH_SIZE);
-    nfa = new Nfa<size_t>();
-    ioResult.reserve(100000);
+    nfa = new Nfa();
 
-    omp_set_num_threads(THREAD_COUNT);
+    //omp_set_num_threads(THREAD_COUNT);
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr);
-
-    initLinearMap();
 
     load_init_data(input);
 }
