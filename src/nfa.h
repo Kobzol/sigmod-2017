@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 #include <algorithm>
+#include <map>
 
 #include "word.h"
 #include "util.h"
@@ -19,13 +20,13 @@ struct NfaIterator
     {
 
     }
-    NfaIterator(unsigned int state, int edgeIndex, unsigned int index) : state(state), edgeIndex(edgeIndex), index(index)
+    NfaIterator(unsigned int state, ssize_t edgeIndex, unsigned int index) : state(state), edgeIndex(edgeIndex), index(index)
     {
 
     }
 
     unsigned state;
-    int edgeIndex;
+    ssize_t edgeIndex;
     unsigned int index;
 };
 
@@ -74,7 +75,7 @@ bool operator==(const Edge& e1, const Edge& e2);
 class CombinedNfaState
 {
 public:
-    std::vector<Edge> edges;
+    std::unordered_map<DictHash, Edge> edges;
     Word word;
 };
 
@@ -104,19 +105,15 @@ public:
             int foundState = -1;
             if (iterator.edgeIndex == NO_EDGE)
             {
-                auto it = std::lower_bound(state.edges.begin(), state.edges.end(), input, [](Edge& edge, DictHash value)
+                auto it = state.edges.find(input);
+                if (it != state.edges.end())
                 {
-                    return edge.hashes[0] < value;
-                });
-
-                if (it != state.edges.end() && it->hashes[0] == input)
-                {
-                    if (it->hashes.size() == 1)
+                    if (it->second.hashes.size() == 1)
                     {
-                        foundState = it->stateIndex;
-                        nextStates.emplace_back(it->stateIndex, NO_EDGE, 0);
+                        foundState = it->second.stateIndex;
+                        nextStates.emplace_back(it->second.stateIndex, NO_EDGE, 0);
                     }
-                    else nextStates.emplace_back(iterator.state, it - state.edges.begin(), 1);
+                    else nextStates.emplace_back(iterator.state, input, 1);
                 }
             }
             else

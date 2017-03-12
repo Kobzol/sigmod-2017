@@ -62,7 +62,7 @@ public:
             {
                 size_t newStateId = nfa.createState();
                 std::vector<DictHash> suffix(edge.hashes.cbegin() + iterator.index, edge.hashes.cend());
-                nfa.states[newStateId].edges.emplace_back(suffix, edge.stateIndex);
+                nfa.states[newStateId].edges.insert({suffix[0], Edge(suffix, edge.stateIndex)});
 
                 edge.stateIndex = newStateId;
                 edge.hashes.resize(iterator.index);
@@ -85,16 +85,13 @@ public:
             CombinedNfaState& state = nfa.states[iterator.state];
             if (iterator.edgeIndex == NO_EDGE)
             {
-                auto it = std::lower_bound(state.edges.begin(), state.edges.end(), hash, [](Edge& edge, DictHash value)
+                auto it = state.edges.find(hash);
+                if (it != state.edges.end())
                 {
-                    return edge.hashes[0] < value;
-                });
-                if (it != state.edges.end() && it->hashes[0] == hash)
-                {
-                    Edge& edge = *it;
+                    Edge& edge = it->second;
                     if (edge.hashes.size() > 1)
                     {
-                        iterator.edgeIndex = (it - state.edges.begin()); // edge found
+                        iterator.edgeIndex = hash; // edge found
                         iterator.index = 1;
                     }
                     else
@@ -109,9 +106,8 @@ public:
                 {
                     // create edge
                     size_t newStateId = nfa.createState();
-                    int index = (it - state.edges.begin());
-                    state.edges.insert(it, Edge(hash, newStateId));
-                    iterator.edgeIndex = index;
+                    state.edges.insert({hash, Edge(hash, newStateId)});
+                    iterator.edgeIndex = hash;
                     iterator.index = 1;
                 }
             }
@@ -140,7 +136,7 @@ public:
                         size_t newStateId = nfa.createState();
                         std::vector<DictHash> suffix(edge.hashes.cbegin() + iterator.index, edge.hashes.cend());
 
-                        nfa.states[newStateId].edges.emplace_back(suffix, edge.stateIndex);
+                        nfa.states[newStateId].edges.insert({suffix[0], Edge(suffix, edge.stateIndex)});
 
                         edge.stateIndex = newStateId;
                         edge.hashes.resize(iterator.index);
