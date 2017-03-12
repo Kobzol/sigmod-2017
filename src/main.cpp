@@ -71,7 +71,7 @@ void find_in_document(Query& query)
     std::string ngram;
     NfaVisitor visitor;
 
-    visitor.states[visitor.stateIndex].emplace_back(0, 0);
+    visitor.states[visitor.stateIndex].emplace_back();
 
     for (int i = 2; i < size; i++)
     {
@@ -82,9 +82,9 @@ void find_in_document(Query& query)
             for (auto& mapping : visitor.states[visitor.stateIndex])
             {
                 CombinedNfaState& state = nfa->states[mapping.state];
-                int wordIndex = state.wordIndex;
-                if (wordIndex != NO_WORD)
+                if (mapping.edge == -1 && state.wordIndex != NO_WORD)
                 {
+                    int wordIndex = state.wordIndex;
                     Word& word = words[wordIndex];
                     if (word.is_active(timestamp) && found.find(wordIndex) == found.end())
                     {
@@ -98,7 +98,7 @@ void find_in_document(Query& query)
 
         if (__builtin_expect(c == ' ', false))
         {
-            visitor.states[visitor.stateIndex].emplace_back(0, 0);
+            visitor.states[visitor.stateIndex].emplace_back();
         }
     }
 
@@ -216,9 +216,32 @@ void init(std::istream& input)
     wordMap = new SimpleMap<std::string, DictHash>(WORDMAP_HASH_SIZE);
     nfa = new Nfa();
 
-    //omp_set_num_threads(THREAD_COUNT);
+    omp_set_num_threads(THREAD_COUNT);
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr);
+
+    /*nfa->addWord("ahoj", 0, 1);
+    nfa->addWord("ahoj kamo", 0, 2);
+    nfa->addWord("cus", 0, 3);
+
+    NfaVisitor visitor;
+    visitor.states[visitor.stateIndex].emplace_back();
+    nfa->feedWord(visitor, 'a');
+    nfa->feedWord(visitor, 'c');
+
+    visitor.states[visitor.stateIndex].emplace_back();
+    nfa->feedWord(visitor, 'a');
+    nfa->feedWord(visitor, 'h');
+    nfa->feedWord(visitor, 'o');
+    nfa->feedWord(visitor, 'j');
+
+    nfa->feedWord(visitor, ' ');
+
+    visitor.states[visitor.stateIndex].emplace_back();
+    nfa->feedWord(visitor, 'k');
+    nfa->feedWord(visitor, 'a');
+    nfa->feedWord(visitor, 'm');
+    nfa->feedWord(visitor, 'o');*/
 
     load_init_data(input);
 }
