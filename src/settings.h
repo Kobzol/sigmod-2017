@@ -3,21 +3,19 @@
 #ifndef REAL_RUN
     //#define LOAD_FROM_FILE "sig17starterpack/sample.load"
     //#define LOAD_FROM_FILE "web.load"
-    #define LOAD_FROM_FILE "50000_load/load"
+    #define LOAD_FROM_FILE "large.load"
 #endif
 
-#define PRINT_STATISTICS
+//#define PRINT_STATISTICS
 
 using DictHash = unsigned int;
 #define HASH_NOT_FOUND ((DictHash) -1)
 
-#define THREAD_COUNT (12)
+#define THREAD_COUNT (8)
 #define JOB_SPLIT_SIZE (5000UL)
-#define WORDMAP_HASH_SIZE (2 << 25)
-#define NFA_STATES_INITIAL_SIZE (2 << 26)
-#define MAX_LINEAR_MAP_SIZE (50)
-#define DICTIONARY_HASH_MAP_SIZE (2 << 24)  // must be a power of two
-#define LINEAR_MAP_SIZE (1024 * 1024 * 10)
+#define WORDMAP_HASH_SIZE (2 << 20)
+#define NFA_STATES_INITIAL_SIZE (2 << 20)
+#define DICTIONARY_HASH_MAP_SIZE (2 << 20)  // must be a power of two
 
 #ifdef REAL_RUN
     #ifndef THREAD_COUNT

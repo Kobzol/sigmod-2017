@@ -4,17 +4,12 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <cassert>
 #include "word.h"
 #include "settings.h"
 #include "simplemap.h"
 #include "nfa.h"
 #include "hash.h"
-
-extern Timer insertHashTimer;
-extern Timer nfaAddEdgeTimer;
-extern Timer createStateTimer;
-extern Timer addArcTimer;
-extern Timer getArcTimer;
 
 
 class Dictionary
@@ -22,7 +17,7 @@ class Dictionary
 public:
     Dictionary() : map(DICTIONARY_HASH_MAP_SIZE)
     {
-        this->prefix.reserve(1000);
+
     }
 
     inline DictHash insert(const std::string& word, size_t wordHash)
@@ -30,165 +25,132 @@ public:
         return this->map.get_or_insert_hash(word, wordHash, this->map.size());
     }
 
-    template <typename MapType>
-    size_t createWordNfa(const std::string& word, size_t start, Nfa<MapType>& nfa, size_t timestamp, size_t& wordHash)
+    size_t createWordNfa(const std::string& word, int start, Nfa& nfa, size_t timestamp, size_t& wordHash)
     {
-        ssize_t activeState = 0;
-        size_t size = word.size();
+        NfaIterator iterator(0, NO_EDGE, 0);
+        int size = (int) word.size();
         size_t prefixHash;
         HASH_INIT(prefixHash);
-        size_t i = start;
+        std::string prefix;
 
-        for (; i < size; i++)
+        for (int i = start; i < size; i++)
         {
             char c = word[i];
             HASH_UPDATE(wordHash, c);
 
             if (__builtin_expect(c == ' ', false))
             {
-                DictHash hash = this->insert(this->prefix, prefixHash);
-                this->nfaAddEdge(nfa, hash, activeState);
-                this->prefix.clear();
-                HASH_INIT(prefixHash);
-                i++;
-                break;
-            }
-            else
-            {
-                this->prefix += c;
-                HASH_UPDATE(prefixHash, c);
-            }
-        }
-
-        if (activeState == 0)
-        {
-            this->nfaAddEdge(nfa, this->insert(this->prefix, prefixHash), activeState);
-            nfa.states[activeState].word.from = timestamp;
-            nfa.states[activeState].word.to = UINT32_MAX;
-            nfa.states[activeState].word.length = word.size() - start;
-            this->prefix.clear();
-
-            return (size_t) activeState;
-        }
-
-        for (; i < size; i++)
-        {
-            char c = word[i];
-            HASH_UPDATE(wordHash, c);
-
-            if (__builtin_expect(c == ' ', false))
-            {
-                DictHash hash = this->insert(this->prefix, prefixHash);
-                this->nfaAddEdge(nfa, hash, activeState);
-                this->prefix.clear();
+                DictHash hash = this->insert(prefix, prefixHash);
+                this->nfaAddEdge(nfa, hash, iterator);
+                prefix.clear();
                 HASH_INIT(prefixHash);
             }
             else
             {
-                this->prefix += c;
+                prefix += c;
                 HASH_UPDATE(prefixHash, c);
             }
         }
 
-        DictHash hash = this->insert(this->prefix, prefixHash);
-        this->nfaAddEdge(nfa, hash, activeState);
+        DictHash hash = this->insert(prefix, prefixHash);
+        this->nfaAddEdge(nfa, hash, iterator);
 
-        nfa.states[activeState].word.from = timestamp;
-        nfa.states[activeState].word.to = UINT32_MAX;
-        nfa.states[activeState].word.length = word.size() - start;
-        this->prefix.clear();
-
-        return (size_t) activeState;
-    }
-
-    template <typename MapType>
-    void nfaAddEdgeRoot(Nfa<MapType>& nfa, DictHash hash, ssize_t& activeState)
-    {
-        ssize_t arc = nfa.rootState.get_arc(hash);
-        if (arc == NO_ARC)
+        if (iterator.edgeIndex != NO_EDGE)
         {
-            size_t newStateId = nfa.createState();
-            nfa.rootState.add_arc(hash, newStateId);
-            activeState = newStateId;
-        }
-        else activeState = arc;
-    }
-    template <typename MapType>
-    void nfaAddEdgeNoRoot(Nfa<MapType>& nfa, DictHash hash, ssize_t& activeState)
-    {
-        ssize_t arc = (nfa.states[activeState].*(nfa.states[activeState].get_fn))(hash);
-        if (arc == NO_ARC)
-        {
-            size_t stateId = nfa.createState();
-            NfaStateType<MapType>& state = nfa.states[activeState];
-            state.add_arc(hash, stateId);
-            activeState = stateId;
-        }
-        else activeState = arc;
-    }
-
-    template <typename MapType>
-    void nfaAddEdge(Nfa<MapType>& nfa, DictHash hash, ssize_t& activeState)
-    {
-        ssize_t arc;
-        if (activeState == 0)
-        {
-
-#ifdef PRINT_STATISTICS
-            getArcTimer.start();
-#endif
-            arc = nfa.rootState.get_arc(hash);
-#ifdef PRINT_STATISTICS
-            getArcTimer.add();
-#endif
-            if (arc == NO_ARC)
+            Edge& edge = nfa.states[iterator.state].edges[iterator.edgeIndex];
+            if (iterator.index < edge.hashes.size())    // substring
             {
-#ifdef PRINT_STATISTICS
-                createStateTimer.start();
-#endif
                 size_t newStateId = nfa.createState();
-#ifdef PRINT_STATISTICS
-                createStateTimer.add();
-                addArcTimer.start();
-#endif
-                nfa.rootState.add_arc(hash, newStateId);
-#ifdef PRINT_STATISTICS
-                addArcTimer.add();
-#endif
-                activeState = newStateId;
+                std::vector<DictHash> suffix(edge.hashes.cbegin() + iterator.index, edge.hashes.cend());
+                nfa.states[newStateId].edges.emplace_back(suffix, edge.stateIndex);
+
+                edge.stateIndex = newStateId;
+                edge.hashes.resize(iterator.index);
+
+                iterator.state = newStateId;
             }
-            else activeState = arc;
+            else iterator.state = edge.stateIndex;
         }
-        else
+
+        nfa.states[iterator.state].word.from = timestamp;
+        nfa.states[iterator.state].word.to = UINT32_MAX;
+        nfa.states[iterator.state].word.length = (int) (word.size() - start);
+        return (size_t) iterator.state;
+    }
+
+    void nfaAddEdge(Nfa& nfa, DictHash hash, NfaIterator& iterator)
+    {
+        while (true)
         {
-#ifdef PRINT_STATISTICS
-            getArcTimer.start();
-#endif
-            auto& state = nfa.states[activeState];
-            arc = state.get_arc(hash);
-#ifdef PRINT_STATISTICS
-            getArcTimer.add();
-#endif
-            if (arc == NO_ARC)
+            CombinedNfaState& state = nfa.states[iterator.state];
+            if (iterator.edgeIndex == NO_EDGE)
             {
-#ifdef PRINT_STATISTICS
-                createStateTimer.start();
-#endif
-                size_t stateId = nfa.createState();
-#ifdef PRINT_STATISTICS
-                createStateTimer.add();
-#endif
-                NfaStateType<MapType>& nextState = nfa.states[activeState];
-#ifdef PRINT_STATISTICS
-                addArcTimer.start();
-#endif
-                nextState.add_arc(hash, stateId);
-#ifdef PRINT_STATISTICS
-                addArcTimer.add();
-#endif
-                activeState = stateId;
+                int size = (int) state.edges.size();
+                for (int i = 0; i < size; i++)
+                {
+                    Edge& edge = state.edges[i];
+                    if (edge.hashes[0] == hash)
+                    {
+                        if (edge.hashes.size() > 1)
+                        {
+                            iterator.edgeIndex = i; // edge found
+                            iterator.index = 1;
+                        }
+                        else
+                        {
+                            iterator.edgeIndex = NO_EDGE;
+                            iterator.index = 0;
+                            iterator.state = edge.stateIndex;
+                        }
+                        return;
+                    }
+                }
+
+                // create edge
+                size_t newStateId = nfa.createState();
+                state.edges.emplace_back(hash, newStateId);
+                iterator.edgeIndex = state.edges.size() - 1;
+                iterator.index = 1;
             }
-            else activeState = arc;
+            else
+            {
+                Edge& edge = state.edges[iterator.edgeIndex];
+                if (iterator.index == edge.hashes.size())   // advance edge
+                {
+                    edge.hashes.push_back(hash);
+                    iterator.index++;
+                }
+                else
+                {
+                    if (edge.hashes[iterator.index] == hash)
+                    {
+                        iterator.index++;
+                        if (iterator.index >= edge.hashes.size())   // move to next state
+                        {
+                            iterator.state = edge.stateIndex;
+                            iterator.edgeIndex = NO_EDGE;
+                            iterator.index = 0;
+                        }
+                    }
+                    else
+                    {
+                        size_t newStateId = nfa.createState();
+                        std::vector<DictHash> suffix(edge.hashes.cbegin() + iterator.index, edge.hashes.cend());
+
+                        nfa.states[newStateId].edges.emplace_back(suffix, edge.stateIndex);
+
+                        edge.stateIndex = newStateId;
+                        edge.hashes.resize(iterator.index);
+
+                        iterator.state = newStateId;
+                        iterator.edgeIndex = NO_EDGE;
+                        iterator.index = 0;
+                        continue;
+                    }
+                }
+            }
+
+            return;
         }
     }
 
@@ -197,6 +159,5 @@ public:
         return this->map.size();
     }
 
-    std::string prefix;
     SimpleMap<std::string, DictHash> map;
 };

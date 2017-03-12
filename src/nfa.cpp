@@ -1,12 +1,6 @@
 #include "nfa.h"
 
-ssize_t* linearMap;
-
-void initLinearMap()
+bool operator==(const Edge& e1, const Edge& e2)
 {
-    linearMap = new ssize_t[LINEAR_MAP_SIZE];
-    for (int i = 0; i < LINEAR_MAP_SIZE; i++)
-    {
-        linearMap[i] = NO_ARC;
-    }
+    return e1.hashes == e2.hashes && e1.stateIndex == e2.stateIndex;
 }

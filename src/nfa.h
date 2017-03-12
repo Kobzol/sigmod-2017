@@ -11,20 +11,22 @@
 #include "timer.h"
 
 #define NO_ARC ((ssize_t) -1)
+#define NO_EDGE ((int) -1)
 
-extern ssize_t* linearMap;
-void initLinearMap();
-
-template <typename MapType>
-struct Mapping
+struct NfaIterator
 {
-    Mapping(MapType key, unsigned int value) : key(key), value(value)
+    NfaIterator() : state(0), edgeIndex(NO_EDGE), index(0)
+    {
+
+    }
+    NfaIterator(unsigned int state, int edgeIndex, unsigned int index) : state(state), edgeIndex(edgeIndex), index(index)
     {
 
     }
 
-    MapType key;
-    unsigned int value;
+    unsigned state;
+    int edgeIndex;
+    unsigned int index;
 };
 
 class NfaVisitor
@@ -44,242 +46,120 @@ public:
         this->states[1].clear();
     }
 
-    std::vector<ssize_t> states[2];
+    std::vector<NfaIterator> states[2];
     size_t stateIndex = 0;
 };
 
-template <typename MapType>
-class HashNfaState
+struct Edge
 {
-public:
-    ssize_t get_arc(const MapType& input) const
+    Edge()
     {
-        auto it = this->arcs.find(input);
-        if (it == this->arcs.end())
-        {
-            return NO_ARC;
-        }
 
-        return it->second;
+    }
+    Edge(DictHash hash, int stateIndex) : stateIndex(stateIndex)
+    {
+        this->hashes.push_back(hash);
+    }
+    Edge(const std::vector<DictHash>& hashes, int stateIndex) : hashes(hashes), stateIndex(stateIndex)
+    {
+
     }
 
-    void add_arc(const MapType& input, size_t index)
-    {
-        this->arcs[input] = index;
-    }
-
-private:
-    HashMap<MapType, size_t> arcs;
+    std::vector<DictHash> hashes;
+    int stateIndex = NO_EDGE;
 };
 
-template <typename MapType>
-class LinearMapNfaState
-{
-public:
-    ssize_t get_arc(const MapType& input) const
-    {
-        return linearMap[input];
-    }
+bool operator==(const Edge& e1, const Edge& e2);
 
-    void add_arc(const MapType& input, size_t index)
-    {
-        linearMap[input] = index;
-    }
-};
-
-template <typename MapType>
-class LinearNfaState
-{
-public:
-    LinearNfaState()
-    {
-
-    }
-
-    ssize_t get_arc(const MapType& input) const
-    {
-        auto it = std::lower_bound(this->keys.begin(), this->keys.end(), input, [](const Mapping<MapType>& i1, const MapType& value) {
-            return i1.key < value;
-        });
-        if (it == this->keys.end() || it->key != input) return NO_ARC;
-        return it->value;
-    }
-
-    void add_arc(const MapType& input, size_t index)
-    {
-        auto it = std::lower_bound(this->keys.begin(), this->keys.end(), input, [](const Mapping<MapType>& i1, const MapType& value) {
-            return i1.key < value;
-        });
-        this->keys.insert(it, Mapping<MapType>(input, index));
-    }
-
-    std::vector<Mapping<MapType>> keys;
-    Word word;
-};
-
-template <typename MapType>
 class CombinedNfaState
 {
 public:
-    CombinedNfaState(): get_fn(&CombinedNfaState<MapType>::get_arc_linear),
-                        add_fn(&CombinedNfaState<MapType>::add_arc_linear)
-    {
-
-    }
-
-    ssize_t get_arc_linear(const MapType& input) const
-    {
-        int size = (int) this->linearMap.size();
-        for (int i = 0; i < size; i++)
-        {
-            if (this->linearMap[i].first == input)
-            {
-                return this->linearMap[i].second;
-            }
-        }
-
-        return NO_ARC;
-    }
-
-    void add_arc_linear(const MapType& input, size_t index)
-    {
-        this->linearMap.emplace_back(input, index);
-
-        if (__builtin_expect(this->linearMap.size() > MAX_LINEAR_MAP_SIZE, false))
-        {
-            int size = (int) this->linearMap.size();
-            for (int i = 0; i < size; i++)
-            {
-                this->hashMap.insert({this->linearMap[i].first, this->linearMap[i].second});
-            }
-
-            this->get_fn = &CombinedNfaState<MapType>::get_arc_hash;
-            this->add_fn = &CombinedNfaState<MapType>::add_arc_hash;
-        }
-    }
-
-    ssize_t get_arc_hash(const MapType& input) const
-    {
-        auto it = this->hashMap.find(input);
-        if (it == this->hashMap.end())
-        {
-            return NO_ARC;
-        }
-
-        return it->second;
-    }
-
-    void add_arc_hash(const MapType& input, size_t index)
-    {
-        this->hashMap.insert({input, (unsigned int) index});
-    }
-
-    std::vector<std::pair<MapType, unsigned int>> linearMap;
-    HashMap<MapType, size_t> hashMap;
-
-    ssize_t (CombinedNfaState<MapType>::*get_fn)(const MapType& input) const;
-    void (CombinedNfaState<MapType>::*add_fn)(const MapType& input, size_t index);
-
+    std::vector<Edge> edges;
     Word word;
 };
 
-template <typename MapType>
-using NfaStateType = LinearNfaState<MapType>;
-
-template <typename MapType>
 class Nfa
 {
 public:
     Nfa()
     {
-        this->states.reserve(NFA_STATES_INITIAL_SIZE);
+        this->states.resize(NFA_STATES_INITIAL_SIZE);
         this->createState();    // add root state
     }
 
-    void feedWord(NfaVisitor& visitor, MapType input, std::vector<std::pair<unsigned int, unsigned int>>& results,
-                  size_t timestamp, bool includeStartState)
+    void feedWord(NfaVisitor& visitor, DictHash input, std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp)
     {
         size_t currentStateIndex = visitor.stateIndex;
         size_t nextStateIndex = 1 - currentStateIndex;
 
-        visitor.states[nextStateIndex].clear();
+        std::vector<NfaIterator>& nextStates = visitor.states[nextStateIndex];
+        nextStates.clear();
+        results.clear();
 
-        if (includeStartState)
+        visitor.states[currentStateIndex].emplace_back();
+
+        for (NfaIterator& iterator : visitor.states[currentStateIndex])
         {
-            ssize_t arc = this->rootState.get_arc(input);
-            if (arc != NO_ARC)
+            CombinedNfaState& state = this->states[iterator.state];
+            int foundState = -1;
+            if (iterator.edgeIndex == NO_EDGE)
             {
-                visitor.states[nextStateIndex].push_back(arc);
-                NfaStateType<MapType>& nextState = this->states[arc];
-                if (nextState.word.is_active(timestamp))
+                int size = (int) state.edges.size();
+                for (int i = 0; i < size; i++)
                 {
-                    results.emplace_back(arc, nextState.word.length);
+                    if (state.edges[i].hashes[0] == input)
+                    {
+                        if (state.edges[i].hashes.size() == 1)
+                        {
+                            foundState = state.edges[i].stateIndex;
+                            nextStates.emplace_back(state.edges[i].stateIndex, NO_EDGE, 0);
+                        }
+                        else nextStates.emplace_back(iterator.state, i, 1);
+                        break;
+                    }
                 }
             }
-        }
-
-        for (ssize_t stateId : visitor.states[currentStateIndex])
-        {
-            NfaStateType<MapType>& state = this->states[stateId];
-            ssize_t nextStateId = state.get_arc(input);
-            if (nextStateId != NO_ARC)
+            else
             {
-                visitor.states[nextStateIndex].push_back(nextStateId);
-
-                NfaStateType<MapType>& nextState = this->states[nextStateId];
-                if (nextState.word.is_active(timestamp))
+                Edge& edge = state.edges[iterator.edgeIndex];
+                if (edge.hashes[iterator.index] == input)
                 {
-                    results.emplace_back(nextStateId, nextState.word.length);
+                    iterator.index++;
+                    if (iterator.index == edge.hashes.size())
+                    {
+                        iterator.state = edge.stateIndex;
+                        iterator.edgeIndex = NO_EDGE;
+                        iterator.index = 0;
+                        foundState = edge.stateIndex;
+                    }
+
+                    nextStates.emplace_back(iterator.state, iterator.edgeIndex, iterator.index);
+                }
+            }
+
+            if (foundState != -1)
+            {
+                CombinedNfaState& wordState = this->states[foundState];
+                if (wordState.word.is_active(timestamp))
+                {
+                    results.emplace_back(foundState, wordState.word.length);
                 }
             }
         }
 
         visitor.stateIndex = nextStateIndex;
     }
-    void feedWordWithInitial(NfaVisitor& visitor, MapType input,
-                             std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp)
-    {
-        size_t currentStateIndex = visitor.stateIndex;
-        size_t nextStateIndex = 1 - currentStateIndex;
-
-        visitor.states[nextStateIndex].clear();
-
-        ssize_t arc = this->rootState.get_arc(input);
-        if (arc != NO_ARC)
-        {
-            visitor.states[nextStateIndex].push_back(arc);
-            NfaStateType<MapType>& nextState = this->states[arc];
-            if (nextState.word.is_active(timestamp))
-            {
-                results.emplace_back(arc, nextState.word.length);
-            }
-        }
-
-        for (ssize_t stateId : visitor.states[currentStateIndex])
-        {
-            NfaStateType<MapType>& state = this->states[stateId];
-            ssize_t nextStateId = state.get_arc(input);
-            if (nextStateId != NO_ARC)
-            {
-                visitor.states[nextStateIndex].push_back(nextStateId);
-
-                NfaStateType<MapType>& nextState = this->states[nextStateId];
-                if (nextState.word.is_active(timestamp))
-                {
-                    results.emplace_back(nextStateId, nextState.word.length);
-                }
-            }
-        }
-
-        visitor.stateIndex = nextStateIndex;
-    }
-
-    LinearMapNfaState<MapType> rootState;
-    std::vector<NfaStateType<MapType>> states;
 
     size_t createState()
     {
-        this->states.emplace_back();
-        return this->states.size() - 1;
+        if (__builtin_expect(this->states.size() <= this->stateIndex, false))
+        {
+            this->states.resize((size_t) (this->states.size() * 1.5));
+        }
+
+        return this->stateIndex++;
     }
+
+    size_t stateIndex = 0;
+    std::vector<CombinedNfaState> states;
 };
