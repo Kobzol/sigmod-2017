@@ -85,32 +85,35 @@ public:
             CombinedNfaState& state = nfa.states[iterator.state];
             if (iterator.edgeIndex == NO_EDGE)
             {
-                int size = (int) state.edges.size();
-                for (int i = 0; i < size; i++)
+                auto it = std::lower_bound(state.edges.begin(), state.edges.end(), hash, [](Edge& edge, DictHash value)
                 {
-                    Edge& edge = state.edges[i];
-                    if (edge.hashes[0] == hash)
+                    return edge.hashes[0] < value;
+                });
+                if (it != state.edges.end() && it->hashes[0] == hash)
+                {
+                    Edge& edge = *it;
+                    if (edge.hashes.size() > 1)
                     {
-                        if (edge.hashes.size() > 1)
-                        {
-                            iterator.edgeIndex = i; // edge found
-                            iterator.index = 1;
-                        }
-                        else
-                        {
-                            iterator.edgeIndex = NO_EDGE;
-                            iterator.index = 0;
-                            iterator.state = edge.stateIndex;
-                        }
-                        return;
+                        iterator.edgeIndex = (it - state.edges.begin()); // edge found
+                        iterator.index = 1;
                     }
+                    else
+                    {
+                        iterator.edgeIndex = NO_EDGE;
+                        iterator.index = 0;
+                        iterator.state = edge.stateIndex;
+                    }
+                    return;
                 }
-
-                // create edge
-                size_t newStateId = nfa.createState();
-                state.edges.emplace_back(hash, newStateId);
-                iterator.edgeIndex = state.edges.size() - 1;
-                iterator.index = 1;
+                else
+                {
+                    // create edge
+                    size_t newStateId = nfa.createState();
+                    int index = (it - state.edges.begin());
+                    state.edges.insert(it, Edge(hash, newStateId));
+                    iterator.edgeIndex = index;
+                    iterator.index = 1;
+                }
             }
             else
             {

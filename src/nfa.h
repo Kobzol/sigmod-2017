@@ -104,19 +104,19 @@ public:
             int foundState = -1;
             if (iterator.edgeIndex == NO_EDGE)
             {
-                int size = (int) state.edges.size();
-                for (int i = 0; i < size; i++)
+                auto it = std::lower_bound(state.edges.begin(), state.edges.end(), input, [](Edge& edge, DictHash value)
                 {
-                    if (state.edges[i].hashes[0] == input)
+                    return edge.hashes[0] < value;
+                });
+
+                if (it != state.edges.end() && it->hashes[0] == input)
+                {
+                    if (it->hashes.size() == 1)
                     {
-                        if (state.edges[i].hashes.size() == 1)
-                        {
-                            foundState = state.edges[i].stateIndex;
-                            nextStates.emplace_back(state.edges[i].stateIndex, NO_EDGE, 0);
-                        }
-                        else nextStates.emplace_back(iterator.state, i, 1);
-                        break;
+                        foundState = it->stateIndex;
+                        nextStates.emplace_back(it->stateIndex, NO_EDGE, 0);
                     }
+                    else nextStates.emplace_back(iterator.state, it - state.edges.begin(), 1);
                 }
             }
             else
