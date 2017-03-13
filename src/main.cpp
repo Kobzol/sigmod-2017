@@ -161,11 +161,22 @@ void batch(size_t& queryIndex)
     computeTimer.start();
 #endif
     {
-        #pragma omp parallel for schedule(dynamic)
-        for (size_t i = 0; i < queryIndex; i++)
+        if (queryIndex > THREAD_COUNT * 2)
         {
-            find_in_document((*queries)[i]);
+            #pragma omp parallel for schedule(dynamic)
+            for (size_t i = 0; i < queryIndex; i++)
+            {
+                find_in_document((*queries)[i]);
+            }
         }
+        else
+        {
+            for (size_t i = 0; i < queryIndex; i++)
+            {
+                find_in_document((*queries)[i]);
+            }
+        }
+
 #ifdef PRINT_STATISTICS
         computeTimer.add();
 #endif
