@@ -14,11 +14,14 @@
 #include "dictionary.h"
 #include "query.h"
 #include "timer.h"
+#include "job.h"
 
 static Dictionary* dict;
 static SimpleMap<std::string, DictHash>* wordMap;
 static Nfa* nfa;
 static std::vector<Query>* queries;
+static std::vector<Job> addJobs;
+static std::vector<Job> deleteJobs;
 
 #ifdef PRINT_STATISTICS
     static std::atomic<int> calcCount{0};
@@ -354,6 +357,19 @@ void batch(size_t& queryIndex)
     batchTimer.start();
 #endif
     {
+        #pragma omp parallel for schedule(dynamic, 5)
+        for (size_t i = 0; i < addJobs.size(); i++)
+        {
+            add_ngram(addJobs[i].data, addJobs[i].timestamp);
+        }
+        addJobs.clear();
+
+        for (auto& job : deleteJobs)
+        {
+            delete_ngram(job.data, job.timestamp);
+        }
+        deleteJobs.clear();
+
         if (queryIndex > THREAD_COUNT * 2)
         {
             #pragma omp parallel for schedule(dynamic)
@@ -400,6 +416,9 @@ void init(std::istream& input)
     dict = new Dictionary();
     wordMap = new SimpleMap<std::string, DictHash>(WORDMAP_HASH_SIZE);
     nfa = new Nfa();
+
+    addJobs.reserve(100000);
+    deleteJobs.reserve(100000);
 
     omp_set_num_threads(THREAD_COUNT);
     std::ios::sync_with_stdio(false);
@@ -477,7 +496,8 @@ int main()
 #ifdef PRINT_STATISTICS
             addTimer.start();
 #endif
-            add_ngram(line, timestamp);
+            //add_ngram(line, timestamp);
+            addJobs.emplace_back(timestamp, line);
 
 #ifdef PRINT_STATISTICS
             addTimer.add();
@@ -488,7 +508,8 @@ int main()
 #ifdef PRINT_STATISTICS
             deleteTimer.start();
 #endif
-            delete_ngram(line, timestamp);
+            //delete_ngram(line, timestamp);
+            deleteJobs.emplace_back(timestamp, line);
 
 #ifdef PRINT_STATISTICS
             deleteTimer.add();

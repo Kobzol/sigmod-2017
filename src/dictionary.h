@@ -22,7 +22,7 @@ public:
 
     inline DictHash insert(const std::string& word, size_t wordHash)
     {
-        return this->map.get_or_insert_hash(word, wordHash, this->map.size());
+        return this->map.get_or_insert_hash(word, wordHash);
     }
 
     /*size_t createWordNfa(const std::string& word, int start, Nfa& nfa, size_t timestamp, size_t& wordHash)
@@ -200,21 +200,19 @@ public:
             Edge* edge;
             const DictHash hash = hashes[hashIndex];
 
-            if (iterator.edgeIndex == NO_EDGE)
+            LOCK(state.flag);
+            Edge* foundEdge;
+            if (state.has_edges() && ((foundEdge = state.get_edge(hash)) != nullptr))
             {
-                Edge* foundEdge = state.get_edge(hash);
-                if (foundEdge != nullptr)
-                {
-                    edge = foundEdge;
-                }
-                else
-                {
-                    size_t newState = nfa.createState();
-                    state.add_edge(hash, Edge(std::vector<DictHash>(hashes.begin() + hashIndex, hashes.end()), newState));
-                    return newState;
-                }
+                edge = foundEdge;
             }
-            else edge = state.get_edge(iterator.edgeIndex);
+            else
+            {
+                size_t newState = nfa.createState();
+                state.add_edge(hash, std::vector<DictHash>(hashes.begin() + hashIndex, hashes.end()), newState);
+                UNLOCK(state.flag);
+                return newState;
+            }
 
             int maxSize = std::min(edge->hashes.size(), hashes.size() - hashIndex);
             int i = 0;
@@ -231,18 +229,18 @@ public:
                 size_t newState = nfa.createState();
                 std::vector<DictHash> suffix(edge->hashes.begin() + i, edge->hashes.end());
 
-                nfa.states[newState].add_edge(suffix[0], Edge(suffix, edge->stateIndex));
+                nfa.states[newState].add_edge(suffix[0], suffix, edge->stateIndex);
 
                 edge->hashes.resize(i);
                 edge->stateIndex = newState;
                 iterator.state = newState;
-                iterator.edgeIndex = NO_EDGE;
             }
             else  // move to next word
             {
                 iterator.state = edge->stateIndex;
-                iterator.edgeIndex = NO_EDGE;
             }
+
+            UNLOCK(state.flag);
             hashIndex += i;
         }
 

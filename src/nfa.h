@@ -75,14 +75,26 @@ bool operator==(const Edge& e1, const Edge& e2);
 class CombinedNfaState
 {
 public:
-    Word word;
+    CombinedNfaState()
+    {
+
+    }
+    CombinedNfaState(const CombinedNfaState& state)
+    {
+        this->word = state.word;
+        this->edges = state.edges;
+    }
 
     Edge* get_edge(DictHash hash)
     {
         if (this->edges.size() > 0)
         {
             auto it = this->edges.find(hash);
-            if (it == this->edges.end()) return nullptr;
+            if (it == this->edges.end())
+            {
+                return nullptr;
+            }
+
             return &it->second;
         }
 
@@ -98,15 +110,15 @@ public:
         return nullptr;
     }
 
-    void add_edge(DictHash hash, const Edge& edge)
+    void add_edge(DictHash hash, const std::vector<DictHash>& hashes, int target)
     {
         if (this->edges.size() > 0)
         {
-            this->edges.insert({hash, edge});
+            this->edges.emplace(std::make_pair(hash, Edge(hashes, target)));
         }
         else
         {
-            this->edgesLinear.emplace_back(hash, edge);
+            this->edgesLinear.emplace_back(hash, Edge(hashes, target));
             if (__builtin_expect(this->edgesLinear.size() > NFA_MAX_LINEAR_EDGE_SIZE, false))
             {
                 for (auto& kv : this->edgesLinear)
@@ -117,6 +129,13 @@ public:
         }
     }
 
+    inline bool has_edges() const
+    {
+        return this->edges.size() > 0;
+    }
+
+    Word word;
+    LOCK_INIT(flag);
 
 private:
     std::vector<std::pair<DictHash, Edge>> edgesLinear;
@@ -193,14 +212,19 @@ public:
 
     size_t createState()
     {
+        LOCK(this->flag);
         if (__builtin_expect(this->states.size() <= this->stateIndex, false))
         {
             this->states.resize((size_t) (this->states.size() * 1.5));
         }
 
-        return this->stateIndex++;
+        size_t value = this->stateIndex++;
+        UNLOCK(this->flag);
+        return value;
     }
 
     size_t stateIndex = 0;
     std::vector<CombinedNfaState> states;
+
+    LOCK_INIT(flag);
 };
