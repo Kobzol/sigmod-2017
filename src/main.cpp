@@ -204,7 +204,7 @@ void add_ngram(const std::string& line, size_t timestamp)
     HASH_UPDATE(wordHash, 'A');
     HASH_UPDATE(wordHash, ' ');
 
-    size_t index = dict->createWordNfa(line, 2, *nfa, timestamp, wordHash);
+    size_t index = dict->createWordNfaTwoStep(line, 2, *nfa, timestamp, wordHash);
 #ifdef PRINT_STATISTICS
     addCreateWord += addTimer.get();
     addTimer.start();
@@ -354,7 +354,7 @@ void batch(size_t& queryIndex)
     batchTimer.start();
 #endif
     {
-        #pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(dynamic)
         for (size_t i = 0; i < queryIndex; i++)
         {
             find_in_document((*queries)[i]);
@@ -525,6 +525,7 @@ int main()
     std::cerr << "NFA get arc time: " << getArcTimer.total << std::endl;
     std::cerr << "NFA state count: " << nfa->stateIndex << std::endl;
     std::cerr << "NFA average edge count: " << edgeSum / (double) nfa->stateIndex << std::endl;
+    std::cerr << "NFA first state edge count: " << nfa->states[0].edges.size() << std::endl;
     std::cerr << std::endl;
 #endif
 
