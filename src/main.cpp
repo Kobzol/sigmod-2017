@@ -498,6 +498,13 @@ int main()
     }
 
 #ifdef PRINT_STATISTICS
+    size_t edgeSum = 0;
+    for (int i = 0; i < nfa->stateIndex; i++)
+    {
+        auto& state = nfa->states[i];
+        edgeSum += state.edges.size();
+    }
+
     std::cerr << "Calc time: " << calcCount << std::endl;
     std::cerr << "Sort time: " << sortCount << std::endl;
     std::cerr << "Create result time: " << writeStringCount << std::endl;
@@ -516,6 +523,8 @@ int main()
     std::cerr << "NFA create state time: " << createStateTimer.total << std::endl;
     std::cerr << "NFA add arc time: " << addArcTimer.total << std::endl;
     std::cerr << "NFA get arc time: " << getArcTimer.total << std::endl;
+    std::cerr << "NFA state count: " << nfa->stateIndex << std::endl;
+    std::cerr << "NFA average edge count: " << edgeSum / (double) nfa->stateIndex << std::endl;
     std::cerr << std::endl;
 #endif
 
