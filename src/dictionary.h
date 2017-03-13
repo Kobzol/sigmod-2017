@@ -25,7 +25,7 @@ public:
         return this->map.get_or_insert_hash(word, wordHash, this->map.size());
     }
 
-    size_t createWordNfa(const std::string& word, int start, Nfa& nfa, size_t timestamp, size_t& wordHash)
+    /*size_t createWordNfa(const std::string& word, int start, Nfa& nfa, size_t timestamp, size_t& wordHash)
     {
         NfaIterator iterator(0, NO_EDGE, 0);
         int size = (int) word.size();
@@ -76,7 +76,7 @@ public:
         nfa.states[iterator.state].word.to = UINT32_MAX;
         nfa.states[iterator.state].word.length = (int) (word.size() - start);
         return (size_t) iterator.state;
-    }
+    }*/
 
     size_t createWordNfaTwoStep(const std::string& word, int start, Nfa& nfa, size_t timestamp, size_t& wordHash)
     {
@@ -113,7 +113,7 @@ public:
         return (size_t) state;
     }
 
-    void nfaAddEdge(Nfa& nfa, DictHash hash, NfaIterator& iterator)
+    /*void nfaAddEdge(Nfa& nfa, DictHash hash, NfaIterator& iterator)
     {
         while (true)
         {
@@ -186,7 +186,7 @@ public:
 
             return;
         }
-    }
+    }*/
 
     size_t nfaAddEdges(Nfa& nfa, const std::vector<DictHash>& hashes)
     {
@@ -202,19 +202,19 @@ public:
 
             if (iterator.edgeIndex == NO_EDGE)
             {
-                auto it = state.edges.find(hash);
-                if (it != state.edges.end())
+                Edge* foundEdge = state.get_edge(hash);
+                if (foundEdge != nullptr)
                 {
-                    edge = &it->second;
+                    edge = foundEdge;
                 }
                 else
                 {
                     size_t newState = nfa.createState();
-                    state.edges.insert({hash, Edge(std::vector<DictHash>(hashes.begin() + hashIndex, hashes.end()), newState)});
+                    state.add_edge(hash, Edge(std::vector<DictHash>(hashes.begin() + hashIndex, hashes.end()), newState));
                     return newState;
                 }
             }
-            else edge = &state.edges[iterator.edgeIndex];
+            else edge = state.get_edge(iterator.edgeIndex);
 
             int maxSize = std::min(edge->hashes.size(), hashes.size() - hashIndex);
             int i = 0;
@@ -231,7 +231,7 @@ public:
                 size_t newState = nfa.createState();
                 std::vector<DictHash> suffix(edge->hashes.begin() + i, edge->hashes.end());
 
-                nfa.states[newState].edges.insert({suffix[0], Edge(suffix, edge->stateIndex)});
+                nfa.states[newState].add_edge(suffix[0], Edge(suffix, edge->stateIndex));
 
                 edge->hashes.resize(i);
                 edge->stateIndex = newState;

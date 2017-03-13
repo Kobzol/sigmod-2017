@@ -15,6 +15,7 @@ using DictHash = unsigned int;
 #define JOB_SPLIT_SIZE (5000UL)
 #define WORDMAP_HASH_SIZE (2 << 24)
 #define NFA_STATES_INITIAL_SIZE (2 << 26)
+#define NFA_MAX_LINEAR_EDGE_SIZE (20)
 #define DICTIONARY_HASH_MAP_SIZE (2 << 24)  // must be a power of two
 
 #ifdef REAL_RUN

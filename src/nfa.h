@@ -75,8 +75,52 @@ bool operator==(const Edge& e1, const Edge& e2);
 class CombinedNfaState
 {
 public:
-    std::unordered_map<DictHash, Edge> edges;
     Word word;
+
+    Edge* get_edge(DictHash hash)
+    {
+        if (this->edges.size() > 0)
+        {
+            auto it = this->edges.find(hash);
+            if (it == this->edges.end()) return nullptr;
+            return &it->second;
+        }
+
+        int size = (int) this->edgesLinear.size();
+        for (int i = 0; i < size; i++)
+        {
+            if (this->edgesLinear[i].first == hash)
+            {
+                return &this->edgesLinear[i].second;
+            }
+        }
+
+        return nullptr;
+    }
+
+    void add_edge(DictHash hash, const Edge& edge)
+    {
+        if (this->edges.size() > 0)
+        {
+            this->edges.insert({hash, edge});
+        }
+        else
+        {
+            this->edgesLinear.emplace_back(hash, edge);
+            if (__builtin_expect(this->edgesLinear.size() > NFA_MAX_LINEAR_EDGE_SIZE, false))
+            {
+                for (auto& kv : this->edgesLinear)
+                {
+                    this->edges.insert({kv.first, kv.second});
+                }
+            }
+        }
+    }
+
+
+private:
+    std::vector<std::pair<DictHash, Edge>> edgesLinear;
+    std::unordered_map<DictHash, Edge> edges;
 };
 
 class Nfa
@@ -105,20 +149,20 @@ public:
             int foundState = -1;
             if (iterator.edgeIndex == NO_EDGE)
             {
-                auto it = state.edges.find(input);
-                if (it != state.edges.end())
+                Edge* edge = state.get_edge(input);
+                if (edge != nullptr)
                 {
-                    if (it->second.hashes.size() == 1)
+                    if (edge->hashes.size() == 1)
                     {
-                        foundState = it->second.stateIndex;
-                        nextStates.emplace_back(it->second.stateIndex, NO_EDGE, 0);
+                        foundState = edge->stateIndex;
+                        nextStates.emplace_back(edge->stateIndex, NO_EDGE, 0);
                     }
                     else nextStates.emplace_back(iterator.state, input, 1);
                 }
             }
             else
             {
-                Edge& edge = state.edges[iterator.edgeIndex];
+                Edge& edge = *state.get_edge(iterator.edgeIndex);
                 if (edge.hashes[iterator.index] == input)
                 {
                     iterator.index++;
