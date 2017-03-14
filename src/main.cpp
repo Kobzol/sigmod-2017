@@ -41,7 +41,7 @@ static std::vector<Job> deleteJobs;
     Timer addArcTimer;
     Timer getArcTimer;
     static double addCreateWord{0};
-    static double addWordmap{0};
+    static double deleteTime{0};
 #endif
 
 void load_init_data(std::istream& input)
@@ -118,7 +118,6 @@ void find_in_document(Query& query)
                         matches.emplace_back(i - wordInfo.second, wordInfo.second);
                     }
                 }
-                indices.clear();
             }
             else
             {
@@ -198,24 +197,13 @@ void delete_ngram(std::string& line, size_t timestamp)
 }
 void add_ngram(const std::string& line, size_t timestamp)
 {
-#ifdef PRINT_STATISTICS
-    Timer addTimer;
-    addTimer.start();
-#endif
     size_t wordHash;
     HASH_INIT(wordHash);
     HASH_UPDATE(wordHash, 'A');
     HASH_UPDATE(wordHash, ' ');
 
     size_t index = dict->createWordNfaTwoStep(line, 2, *nfa, timestamp, wordHash);
-#ifdef PRINT_STATISTICS
-    addCreateWord += addTimer.get();
-    addTimer.start();
-#endif
     (*wordMap).insert_hash(line, (DictHash) index, wordHash);
-#ifdef PRINT_STATISTICS
-    addWordmap += addTimer.get();
-#endif
 }
 void query(size_t& queryIndex, size_t timestamp)
 {
@@ -357,20 +345,32 @@ void batch(size_t& queryIndex)
     batchTimer.start();
 #endif
     {
+#ifdef PRINT_STATISTICS
+        Timer addTimer;
+        addTimer.start();
+#endif
         #pragma omp parallel for schedule(dynamic, 5)
         for (size_t i = 0; i < addJobs.size(); i++)
         {
             add_ngram(addJobs[i].data, addJobs[i].timestamp);
         }
         addJobs.clear();
+#ifdef PRINT_STATISTICS
+        addCreateWord += addTimer.get();
+        addTimer.start();
+#endif
 
         for (auto& job : deleteJobs)
         {
             delete_ngram(job.data, job.timestamp);
         }
         deleteJobs.clear();
+#ifdef PRINT_STATISTICS
+        deleteTime += addTimer.get();
+        computeTimer.start();
+#endif
 
-        if (queryIndex > THREAD_COUNT * 2)
+        if (queryIndex >= THREAD_COUNT)
         {
             #pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queryIndex; i++)
@@ -417,8 +417,8 @@ void init(std::istream& input)
     wordMap = new SimpleMap<std::string, DictHash>(WORDMAP_HASH_SIZE);
     nfa = new Nfa();
 
-    addJobs.reserve(100000);
-    deleteJobs.reserve(100000);
+    addJobs.reserve(1000000);
+    deleteJobs.reserve(1000000);
 
     omp_set_num_threads(THREAD_COUNT);
     std::ios::sync_with_stdio(false);
@@ -530,25 +530,26 @@ int main()
     }
 
 #ifdef PRINT_STATISTICS
-    size_t edgeSum = 0;
+    size_t edgeCount = 0;
+    size_t edgeHashes = 0;
+
     for (int i = 0; i < nfa->stateIndex; i++)
     {
         auto& state = nfa->states[i];
-        edgeSum += state.edges.size();
+        edgeCount += state.edges.size();
+        for (auto& edge : state.edges)
+        {
+            edgeHashes += edge.second.hashes.size();
+        }
     }
 
-    std::cerr << "Calc time: " << calcCount << std::endl;
-    std::cerr << "Sort time: " << sortCount << std::endl;
-    std::cerr << "Create result time: " << writeStringCount << std::endl;
+    std::cerr << "Compute time: " << computeTimer.total << std::endl;
     std::cerr << "IO time: " << ioTimer.total << std::endl;
     std::cerr << "Add time: " << addTimer.total << std::endl;
     std::cerr << "Add create word time: " << addCreateWord << std::endl;
-    std::cerr << "Add wordmap time: " << addWordmap << std::endl;
-    std::cerr << "Delete time: " << deleteTimer.total << std::endl;
+    std::cerr << "Delete time: " << deleteTime << std::endl;
     std::cerr << "Query time: " << queryTimer.total << std::endl;
     std::cerr << "Batch time: " << batchTimer.total << std::endl;
-    std::cerr << "Split jobs time: " << splitJobsTimer.total << std::endl;
-    std::cerr << "Find time: " << computeTimer.total << std::endl;
     std::cerr << "Write result time: " << writeResultTimer.total << std::endl;
     std::cerr << "Insert hash time: " << insertHashTimer.total << std::endl;
     std::cerr << "NFA add edge time: " << nfaAddEdgeTimer.total << std::endl;
@@ -556,7 +557,8 @@ int main()
     std::cerr << "NFA add arc time: " << addArcTimer.total << std::endl;
     std::cerr << "NFA get arc time: " << getArcTimer.total << std::endl;
     std::cerr << "NFA state count: " << nfa->stateIndex << std::endl;
-    std::cerr << "NFA average edge count: " << edgeSum / (double) nfa->stateIndex << std::endl;
+    std::cerr << "NFA average edge count: " << edgeCount / (double) nfa->stateIndex << std::endl;
+    std::cerr << "NFA average hashes per edge count: " << edgeHashes / (double) edgeCount << std::endl;
     std::cerr << "NFA first state edge count: " << nfa->states[0].edges.size() << std::endl;
     std::cerr << std::endl;
 #endif

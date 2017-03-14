@@ -87,8 +87,8 @@ public:
 
     Edge* get_edge(DictHash hash)
     {
-        if (this->edges.size() > 0)
-        {
+        /*if (this->edges.size() > 0)
+        {*/
             auto it = this->edges.find(hash);
             if (it == this->edges.end())
             {
@@ -96,7 +96,7 @@ public:
             }
 
             return &it->second;
-        }
+        /*}
 
         int size = (int) this->edgesLinear.size();
         for (int i = 0; i < size; i++)
@@ -107,15 +107,15 @@ public:
             }
         }
 
-        return nullptr;
+        return nullptr;*/
     }
 
     void add_edge(DictHash hash, const std::vector<DictHash>& hashes, int target)
     {
-        if (this->edges.size() > 0)
-        {
+        /*if (this->edges.size() > 0)
+        {*/
             this->edges.emplace(std::make_pair(hash, Edge(hashes, target)));
-        }
+        /*}
         else
         {
             this->edgesLinear.emplace_back(hash, Edge(hashes, target));
@@ -126,7 +126,7 @@ public:
                     this->edges.insert({kv.first, kv.second});
                 }
             }
-        }
+        }*/
     }
 
     inline bool has_edges() const
@@ -137,8 +137,8 @@ public:
     Word word;
     LOCK_INIT(flag);
 
-private:
-    std::vector<std::pair<DictHash, Edge>> edgesLinear;
+//private:
+    //std::vector<std::pair<DictHash, Edge>> edgesLinear;
     std::unordered_map<DictHash, Edge> edges;
 };
 
