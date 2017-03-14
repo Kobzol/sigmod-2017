@@ -106,10 +106,10 @@ void find_in_document(Query& query)
         char c = line[i];
         if (__builtin_expect(c == ' ', false))
         {
-            DictHash hash = dict->map.get_hash(prefix, prefixHash);
+            DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
             if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
-                nfa->feedWord(visitor, hash, indices, timestamp);
+                nfa->feedWord(visitor, hash, indices, timestamp, true);
                 for (auto wordInfo : indices)
                 {
                     if (found.find(wordInfo.first) == found.end())
@@ -134,10 +134,10 @@ void find_in_document(Query& query)
         }
     }
 
-    DictHash hash = dict->map.get_hash(prefix, prefixHash);
+    DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
     if (hash != HASH_NOT_FOUND)
     {
-        nfa->feedWord(visitor, hash, indices, timestamp);
+        nfa->feedWord(visitor, hash, indices, timestamp, true);
         for (auto wordInfo : indices)
         {
             if (found.find(wordInfo.first) == found.end())
@@ -181,6 +181,121 @@ void find_in_document(Query& query)
     writeStringCount += timer.get();
 #endif
 }
+void find_in_document(Query& query, int from, int to, std::vector<std::string>& result)
+{
+    std::vector<Match> matches;
+    std::unordered_set<unsigned int> found;
+    size_t timestamp = query.timestamp;
+
+    NfaVisitor visitor;
+
+#ifdef PRINT_STATISTICS
+    Timer timer;
+    timer.start();
+#endif
+
+    std::vector<std::pair<unsigned int, unsigned int>> indices; // id, length
+    int size = (int) query.document.size();
+    std::string& line = query.document;
+    std::string prefix;
+    size_t prefixHash;
+    HASH_INIT(prefixHash);
+
+    if (line[from - 1] != ' ' && line[from] != ' ')
+    {
+        while (from < size && line[from] != ' ') from++;
+        if (from >= size) return;
+    }
+    if (line[from] == ' ') from++;
+
+    bool checkAfter = true;
+    bool startNewWords = true;
+
+    int i = from;
+    for (; i < size; i++)
+    {
+        char c = line[i];
+        if (__builtin_expect(c == ' ', false))
+        {
+            DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
+            if (__builtin_expect(hash != HASH_NOT_FOUND, true))
+            {
+                nfa->feedWord(visitor, hash, indices, timestamp, startNewWords);
+                for (auto wordInfo : indices)
+                {
+                    if (found.find(wordInfo.first) == found.end())
+                    {
+                        found.insert(wordInfo.first);
+
+                        matches.emplace_back(i - wordInfo.second, wordInfo.second);
+                    }
+                }
+                indices.clear();
+            }
+            else visitor.states[visitor.stateIndex].clear();
+
+            if (i >= to && visitor.states[visitor.stateIndex].empty())
+            {
+                checkAfter = false;
+                break;
+            }
+
+            HASH_INIT(prefixHash);
+            prefix.clear();
+
+            startNewWords = i < to;
+        }
+        else
+        {
+            prefix += c;
+            HASH_UPDATE(prefixHash, c);
+        }
+    }
+
+    if (checkAfter)
+    {
+        DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
+        if (hash != HASH_NOT_FOUND)
+        {
+            nfa->feedWord(visitor, hash, indices, timestamp, startNewWords);
+            for (auto wordInfo : indices)
+            {
+                if (found.find(wordInfo.first) == found.end())
+                {
+                    matches.emplace_back(i - wordInfo.second, wordInfo.second);
+                }
+            }
+        }
+    }
+
+#ifdef PRINT_STATISTICS
+    calcCount += timer.get();
+    timer.reset();
+#endif
+
+    std::sort(matches.begin(), matches.end(), [](Match& m1, Match& m2)
+    {
+        if (m1.index < m2.index) return true;
+        else if (m1.index > m2.index) return false;
+        else return m1.length <= m2.length;
+    });
+
+#ifdef PRINT_STATISTICS
+    sortCount += timer.get();
+    timer.reset();
+#endif
+
+    for (size_t i = 0; i < matches.size(); i++)
+    {
+        Match& match = matches[i];
+        result.emplace_back();
+        loadWord(match.index, match.length, result[result.size() - 1], query.document);
+    }
+
+#ifdef PRINT_STATISTICS
+    writeStringCount += timer.get();
+#endif
+}
 
 void delete_ngram(std::string& line, size_t timestamp)
 {
@@ -216,7 +331,7 @@ void query(size_t& queryIndex, size_t timestamp)
     }
 }
 
-/*static std::string ioResult;
+static std::string ioResult;
 void batch_split(size_t queryIndex)
 {
 #ifdef PRINT_STATISTICS
@@ -338,7 +453,7 @@ void batch_split(size_t queryIndex)
 #ifdef PRINT_STATISTICS
     writeResultTimer.add();
 #endif
-}*/
+}
 void batch(size_t& queryIndex)
 {
 #ifdef PRINT_STATISTICS
@@ -370,9 +485,8 @@ void batch(size_t& queryIndex)
         computeTimer.start();
 #endif
 
-        if (queryIndex >= THREAD_COUNT)
+        if (queryIndex <= THREAD_COUNT)
         {
-            #pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queryIndex; i++)
             {
                 find_in_document((*queries)[i]);
@@ -380,6 +494,7 @@ void batch(size_t& queryIndex)
         }
         else
         {
+            #pragma omp parallel for schedule(dynamic)
             for (size_t i = 0; i < queryIndex; i++)
             {
                 find_in_document((*queries)[i]);
