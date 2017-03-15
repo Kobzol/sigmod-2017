@@ -24,9 +24,15 @@ struct NfaIterator
     {
 
     }
+    NfaIterator(unsigned int state, ssize_t edgeIndex, const std::string& edge, unsigned int index)
+            : state(state), edgeIndex(edgeIndex), edge(edge), index(index)
+    {
+
+    }
 
     unsigned state;
     ssize_t edgeIndex;
+    std::string edge;
     unsigned int index;
 };
 
@@ -57,16 +63,16 @@ struct Edge
     {
 
     }
-    Edge(DictHash hash, int stateIndex) : stateIndex(stateIndex)
+    Edge(const std::string& hash, int stateIndex) : stateIndex(stateIndex)
     {
         this->hashes.push_back(hash);
     }
-    Edge(const std::vector<DictHash>& hashes, int stateIndex) : hashes(hashes), stateIndex(stateIndex)
+    Edge(const std::vector<std::string>& hashes, int stateIndex) : hashes(hashes), stateIndex(stateIndex)
     {
 
     }
 
-    std::vector<DictHash> hashes;
+    std::vector<std::string> hashes;
     int stateIndex = NO_EDGE;
 };
 
@@ -85,48 +91,20 @@ public:
         this->edges = state.edges;
     }
 
-    Edge* get_edge(DictHash hash)
+    Edge* get_edge(const std::string& hash)
     {
-        /*if (this->edges.size() > 0)
-        {*/
-            auto it = this->edges.find(hash);
-            if (it == this->edges.end())
-            {
-                return nullptr;
-            }
-
-            return &it->second;
-        /*}
-
-        int size = (int) this->edgesLinear.size();
-        for (int i = 0; i < size; i++)
+        auto it = this->edges.find(hash);
+        if (it == this->edges.end())
         {
-            if (this->edgesLinear[i].first == hash)
-            {
-                return &this->edgesLinear[i].second;
-            }
+            return nullptr;
         }
 
-        return nullptr;*/
+        return &it->second;
     }
 
-    void add_edge(DictHash hash, const std::vector<DictHash>& hashes, int target)
+    void add_edge(const std::string& hash, const std::vector<std::string>& hashes, int target)
     {
-        /*if (this->edges.size() > 0)
-        {*/
-            this->edges.emplace(std::make_pair(hash, Edge(hashes, target)));
-        /*}
-        else
-        {
-            this->edgesLinear.emplace_back(hash, Edge(hashes, target));
-            if (__builtin_expect(this->edgesLinear.size() > NFA_MAX_LINEAR_EDGE_SIZE, false))
-            {
-                for (auto& kv : this->edgesLinear)
-                {
-                    this->edges.insert({kv.first, kv.second});
-                }
-            }
-        }*/
+        this->edges.emplace(std::make_pair(hash, Edge(hashes, target)));
     }
 
     inline bool has_edges() const
@@ -139,7 +117,7 @@ public:
 
 //private:
     //std::vector<std::pair<DictHash, Edge>> edgesLinear;
-    std::unordered_map<DictHash, Edge> edges;
+    std::unordered_map<std::string, Edge> edges;
 };
 
 class Nfa
@@ -151,8 +129,7 @@ public:
         this->createState();    // add root state
     }
 
-    void feedWord(NfaVisitor& visitor, DictHash input, std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp,
-        bool includeStartState)
+    void feedWord(NfaVisitor& visitor, const std::string& input, std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp)
     {
         size_t currentStateIndex = visitor.stateIndex;
         size_t nextStateIndex = 1 - currentStateIndex;
@@ -161,10 +138,7 @@ public:
         nextStates.clear();
         results.clear();
 
-        if (includeStartState)
-        {
-            visitor.states[currentStateIndex].emplace_back();
-        }
+        visitor.states[currentStateIndex].emplace_back();
 
         for (NfaIterator& iterator : visitor.states[currentStateIndex])
         {
@@ -180,12 +154,15 @@ public:
                         foundState = edge->stateIndex;
                         nextStates.emplace_back(edge->stateIndex, NO_EDGE, 0);
                     }
-                    else nextStates.emplace_back(iterator.state, input, 1);
+                    else
+                    {
+                        nextStates.emplace_back(iterator.state, 1, input, 1);
+                    }
                 }
             }
             else
             {
-                Edge& edge = *state.get_edge(iterator.edgeIndex);
+                Edge& edge = *state.get_edge(iterator.edge);
                 if (edge.hashes[iterator.index] == input)
                 {
                     iterator.index++;
@@ -197,7 +174,7 @@ public:
                         foundState = edge.stateIndex;
                     }
 
-                    nextStates.emplace_back(iterator.state, iterator.edgeIndex, iterator.index);
+                    nextStates.emplace_back(iterator.state, iterator.edgeIndex, iterator.edge, iterator.index);
                 }
             }
 
