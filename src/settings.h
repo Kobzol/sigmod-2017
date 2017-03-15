@@ -6,12 +6,12 @@
     #define LOAD_FROM_FILE "large.load"
 #endif
 
-//#define PRINT_STATISTICS
+#define PRINT_STATISTICS
 
 using DictHash = unsigned int;
 #define HASH_NOT_FOUND ((DictHash) -1)
 
-#define THREAD_COUNT (8)
+#define THREAD_COUNT (12)
 #define JOB_SPLIT_SIZE (5000UL)
 #define WORDMAP_HASH_SIZE (2 << 24)
 #define NFA_STATES_INITIAL_SIZE (2 << 26)

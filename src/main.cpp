@@ -58,7 +58,7 @@ void load_init_data(std::istream& input)
         else
         {
             size_t index = dict->createWordNfaTwoStep(line, 0, *nfa, 0);
-            wordMap->insert("A " + line, index);
+            wordMap->insert<false>("A " + line, index);
         }
     }
 }
@@ -442,7 +442,7 @@ void batch(size_t& queryIndex)
         Timer addTimer;
         addTimer.start();
 #endif
-        #pragma omp parallel for schedule(dynamic, 5)
+        #pragma omp parallel for schedule(dynamic, 3)
         for (size_t i = 0; i < addJobs.size(); i++)
         {
             add_ngram(addJobs[i].data, addJobs[i].timestamp);
