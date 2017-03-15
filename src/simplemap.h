@@ -202,14 +202,15 @@ public:
     }
     SimpleMapChained& operator=(const SimpleMapChained&) = delete;
 
+    template <bool sync=true>
     void insert(const Key& key, Value value)
     {
         size_t hash = fnv(key) & this->bitCapacity;
 
-        LOCK(this->nodes[hash].flag);
+        if (sync) LOCK(this->nodes[hash].flag);
         this->nodes[hash].items.emplace_back(key, value);
         this->count++;
-        UNLOCK(this->nodes[hash].flag);
+        if (sync) UNLOCK(this->nodes[hash].flag);
     }
     void insert_hash(const Key& key, Value value, size_t hash)
     {

@@ -1,6 +1,24 @@
 #include "nfa.h"
 
-bool operator==(const Edge& e1, const Edge& e2)
+// TODO: unroll
+int get_prefix(const std::string& word, const size_t start, const std::string& needle)
 {
-    return e1.hashes == e2.hashes && e1.stateIndex == e2.stateIndex;
+    int end = (int) std::min(needle.size(), word.size() - start);
+    int prefix = 0;
+    for (; prefix < end; prefix++)
+    {
+        if (word[start + prefix] != needle[prefix]) return prefix;
+    }
+    return prefix;
 }
+int get_prefix(const std::string& word, size_t wordStart, const std::string& needle, size_t needleStart)
+{
+    int end = (int) std::min(needle.size() - needleStart, word.size() - wordStart);
+    int prefix = 0;
+    for (; prefix < end; prefix++)
+    {
+        if (word[wordStart + prefix] != needle[needleStart + prefix]) return prefix;
+    }
+    return prefix;
+}
+

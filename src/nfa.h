@@ -14,6 +14,9 @@
 #define NO_ARC ((ssize_t) -1)
 #define NO_EDGE ((int) -1)
 
+int get_prefix(const std::string& word, size_t start, const std::string& needle);
+int get_prefix(const std::string& word, size_t wordStart, const std::string& needle, size_t needleStart);
+
 struct NfaIterator
 {
     NfaIterator() : state(0), edgeIndex(NO_EDGE), index(0)
@@ -57,20 +60,14 @@ struct Edge
     {
 
     }
-    Edge(DictHash hash, int stateIndex) : stateIndex(stateIndex)
-    {
-        this->hashes.push_back(hash);
-    }
-    Edge(const std::vector<DictHash>& hashes, int stateIndex) : hashes(hashes), stateIndex(stateIndex)
+    Edge(const std::string& text, int stateIndex) : text(text), stateIndex(stateIndex)
     {
 
     }
 
-    std::vector<DictHash> hashes;
+    std::string text;
     int stateIndex = NO_EDGE;
 };
-
-bool operator==(const Edge& e1, const Edge& e2);
 
 class CombinedNfaState
 {
@@ -85,61 +82,15 @@ public:
         this->edges = state.edges;
     }
 
-    Edge* get_edge(DictHash hash)
+    void add_edge(const std::string& text, int target)
     {
-        /*if (this->edges.size() > 0)
-        {*/
-            auto it = this->edges.find(hash);
-            if (it == this->edges.end())
-            {
-                return nullptr;
-            }
-
-            return &it->second;
-        /*}
-
-        int size = (int) this->edgesLinear.size();
-        for (int i = 0; i < size; i++)
-        {
-            if (this->edgesLinear[i].first == hash)
-            {
-                return &this->edgesLinear[i].second;
-            }
-        }
-
-        return nullptr;*/
-    }
-
-    void add_edge(DictHash hash, const std::vector<DictHash>& hashes, int target)
-    {
-        /*if (this->edges.size() > 0)
-        {*/
-            this->edges.emplace(std::make_pair(hash, Edge(hashes, target)));
-        /*}
-        else
-        {
-            this->edgesLinear.emplace_back(hash, Edge(hashes, target));
-            if (__builtin_expect(this->edgesLinear.size() > NFA_MAX_LINEAR_EDGE_SIZE, false))
-            {
-                for (auto& kv : this->edgesLinear)
-                {
-                    this->edges.insert({kv.first, kv.second});
-                }
-            }
-        }*/
-    }
-
-    inline bool has_edges() const
-    {
-        return this->edges.size() > 0;
+        this->edges.emplace_back(text, target);
     }
 
     Word word;
     LOCK_INIT(flag);
 
-//private:
-    //std::vector<std::pair<DictHash, Edge>> edgesLinear;
-    std::unordered_map<DictHash, Edge> edges;
+    std::vector<Edge> edges;
 };
 
 class Nfa
@@ -151,8 +102,9 @@ public:
         this->createState();    // add root state
     }
 
-    void feedWord(NfaVisitor& visitor, DictHash input, std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp,
-        bool includeStartState)
+    void feedWord(NfaVisitor& visitor, const std::string& input,
+                  std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp,
+                  bool includeStartState)
     {
         size_t currentStateIndex = visitor.stateIndex;
         size_t nextStateIndex = 1 - currentStateIndex;
@@ -168,45 +120,59 @@ public:
 
         for (NfaIterator& iterator : visitor.states[currentStateIndex])
         {
-            CombinedNfaState& state = this->states[iterator.state];
-            int foundState = -1;
-            if (iterator.edgeIndex == NO_EDGE)
+            CombinedNfaState* state = &this->states[iterator.state];
+            size_t charIndex = 0;
+            size_t inputSize = input.size();
+
+            while (charIndex < inputSize)
             {
-                Edge* edge = state.get_edge(input);
-                if (edge != nullptr)
+                Edge* edge = nullptr;
+                int prefix = 0;
+                if (iterator.edgeIndex == NO_EDGE)
                 {
-                    if (edge->hashes.size() == 1)
+                    int edgeCount = (int) state->edges.size();
+                    for (int i = 0; i < edgeCount; i++)
                     {
-                        foundState = edge->stateIndex;
-                        nextStates.emplace_back(edge->stateIndex, NO_EDGE, 0);
+                        edge = &state->edges[i];
+                        prefix = get_prefix(input, charIndex, edge->text);
+                        if (prefix > 0)
+                        {
+                            iterator.edgeIndex = i;
+                            break;
+                        }
                     }
-                    else nextStates.emplace_back(iterator.state, input, 1);
                 }
-            }
-            else
-            {
-                Edge& edge = *state.get_edge(iterator.edgeIndex);
-                if (edge.hashes[iterator.index] == input)
+                else
                 {
-                    iterator.index++;
-                    if (iterator.index == edge.hashes.size())
+                    edge = &state->edges[iterator.edgeIndex];
+                    prefix = get_prefix(edge->text, iterator.index, input, charIndex);
+                }
+
+                if (edge != nullptr && prefix > 0)
+                {
+                    if ((edge->text.size() - iterator.index) == prefix)   // move to next state
                     {
-                        iterator.state = edge.stateIndex;
+                        state = &this->states[edge->stateIndex];
+                        iterator.state = edge->stateIndex;
                         iterator.edgeIndex = NO_EDGE;
                         iterator.index = 0;
-                        foundState = edge.stateIndex;
+                    }
+                    else
+                    {
+                        iterator.index += prefix;
                     }
 
-                    nextStates.emplace_back(iterator.state, iterator.edgeIndex, iterator.index);
+                    charIndex += prefix;
                 }
+                else break;
             }
 
-            if (foundState != -1)
+            if (charIndex == inputSize)
             {
-                CombinedNfaState& wordState = this->states[foundState];
-                if (wordState.word.is_active(timestamp))
+                nextStates.emplace_back(iterator.state, iterator.edgeIndex, iterator.index);
+                if (iterator.edgeIndex == NO_EDGE && this->states[iterator.state].word.is_active(timestamp)) // found word
                 {
-                    results.emplace_back(foundState, wordState.word.length);
+                    results.emplace_back(iterator.state, this->states[iterator.state].word.length);
                 }
             }
         }

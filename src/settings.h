@@ -11,12 +11,20 @@
 using DictHash = unsigned int;
 #define HASH_NOT_FOUND ((DictHash) -1)
 
+//#define VTUNE
+
 #define THREAD_COUNT (8)
 #define JOB_SPLIT_SIZE (5000UL)
-#define WORDMAP_HASH_SIZE (2 << 24)
-#define NFA_STATES_INITIAL_SIZE (2 << 26)
-#define NFA_MAX_LINEAR_EDGE_SIZE (20)
-#define DICTIONARY_HASH_MAP_SIZE (2 << 24)  // must be a power of two
+
+#ifdef VTUNE
+    #define NFA_STATES_INITIAL_SIZE (2 << 20)
+    #define WORDMAP_HASH_SIZE (2 << 20)
+    #define DICTIONARY_HASH_MAP_SIZE (2 << 20)  // must be a power of two
+#else
+    #define NFA_STATES_INITIAL_SIZE (2 << 26)
+    #define WORDMAP_HASH_SIZE (2 << 24)
+    #define DICTIONARY_HASH_MAP_SIZE (2 << 24)  // must be a power of two
+#endif
 
 #ifdef REAL_RUN
     #ifndef THREAD_COUNT

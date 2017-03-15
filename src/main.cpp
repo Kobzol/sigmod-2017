@@ -17,7 +17,7 @@
 #include "job.h"
 
 static Dictionary* dict;
-static SimpleMap<std::string, DictHash>* wordMap;
+static SimpleMap<std::string, size_t>* wordMap;
 static Nfa* nfa;
 static std::vector<Query>* queries;
 static std::vector<Job> addJobs;
@@ -57,9 +57,8 @@ void load_init_data(std::istream& input)
         }
         else
         {
-            size_t prefixHash;
-            size_t index = dict->createWordNfaTwoStep(line, 0, *nfa, 0, prefixHash);
-            (*wordMap).insert("A " + line, (DictHash)(index));
+            size_t index = dict->createWordNfaTwoStep(line, 0, *nfa, 0);
+            wordMap->insert<false>("A " + line, index);
         }
     }
 }
@@ -97,53 +96,38 @@ void find_in_document(Query& query)
     int size = (int) query.document.size();
     std::string& line = query.document;
     std::string prefix;
-    size_t prefixHash;
-    HASH_INIT(prefixHash);
-    int i = 2;
 
+    int i = 2;
     for (; i < size; i++)
     {
         char c = line[i];
         if (__builtin_expect(c == ' ', false))
         {
-            DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
-            if (__builtin_expect(hash != HASH_NOT_FOUND, true))
+            nfa->feedWord(visitor, prefix, indices, timestamp, true);
+            for (auto wordInfo : indices)
             {
-                nfa->feedWord(visitor, hash, indices, timestamp, true);
-                for (auto wordInfo : indices)
+                if (found.find(wordInfo.first) == found.end())
                 {
-                    if (found.find(wordInfo.first) == found.end())
-                    {
-                        found.insert(wordInfo.first);
-                        matches.emplace_back(i - wordInfo.second, wordInfo.second);
-                    }
+                    found.insert(wordInfo.first);
+                    matches.emplace_back(i - wordInfo.second, wordInfo.second);
                 }
             }
-            else
-            {
-                visitor.states[visitor.stateIndex].clear();
-            }
 
-            HASH_INIT(prefixHash);
+            nfa->feedWord(visitor, " ", indices, timestamp, false);
             prefix.clear();
         }
         else
         {
             prefix += c;
-            HASH_UPDATE(prefixHash, c);
         }
     }
 
-    DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
-    if (hash != HASH_NOT_FOUND)
+    nfa->feedWord(visitor, prefix, indices, timestamp, true);
+    for (auto wordInfo : indices)
     {
-        nfa->feedWord(visitor, hash, indices, timestamp, true);
-        for (auto wordInfo : indices)
+        if (found.find(wordInfo.first) == found.end())
         {
-            if (found.find(wordInfo.first) == found.end())
-            {
-                matches.emplace_back(i - wordInfo.second, wordInfo.second);
-            }
+            matches.emplace_back(i - wordInfo.second, wordInfo.second);
         }
     }
 
@@ -181,7 +165,7 @@ void find_in_document(Query& query)
     writeStringCount += timer.get();
 #endif
 }
-void find_in_document(Query& query, int from, int to, std::vector<std::string>& result)
+/*void find_in_document(Query& query, int from, int to, std::vector<std::string>& result)
 {
     std::vector<Match> matches;
     std::unordered_set<unsigned int> found;
@@ -295,15 +279,15 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
 #ifdef PRINT_STATISTICS
     writeStringCount += timer.get();
 #endif
-}
+}*/
 
 void delete_ngram(std::string& line, size_t timestamp)
 {
     line[0] = 'A';
-    DictHash index = wordMap->get(line);
-    if (index != HASH_NOT_FOUND)
+    size_t it = wordMap->get<false>(line);
+    if (it != HASH_NOT_FOUND)
     {
-        Word& ngram = nfa->states[index].word;
+        Word& ngram = nfa->states[it].word;
         if (ngram.is_active(timestamp))
         {
             ngram.deactivate(timestamp);
@@ -312,13 +296,8 @@ void delete_ngram(std::string& line, size_t timestamp)
 }
 void add_ngram(const std::string& line, size_t timestamp)
 {
-    size_t wordHash;
-    HASH_INIT(wordHash);
-    HASH_UPDATE(wordHash, 'A');
-    HASH_UPDATE(wordHash, ' ');
-
-    size_t index = dict->createWordNfaTwoStep(line, 2, *nfa, timestamp, wordHash);
-    (*wordMap).insert_hash(line, (DictHash) index, wordHash);
+    size_t index = dict->createWordNfaTwoStep(line, 2, *nfa, timestamp);
+    wordMap->insert(line, index);
 }
 void query(size_t& queryIndex, size_t timestamp)
 {
@@ -332,7 +311,7 @@ void query(size_t& queryIndex, size_t timestamp)
 }
 
 static std::string ioResult;
-void batch_split(size_t queryIndex)
+/*void batch_split(size_t queryIndex)
 {
 #ifdef PRINT_STATISTICS
     splitJobsTimer.start();
@@ -453,7 +432,7 @@ void batch_split(size_t queryIndex)
 #ifdef PRINT_STATISTICS
     writeResultTimer.add();
 #endif
-}
+}*/
 void batch(size_t& queryIndex)
 {
 #ifdef PRINT_STATISTICS
@@ -529,7 +508,7 @@ void batch(size_t& queryIndex)
 void init(std::istream& input)
 {
     dict = new Dictionary();
-    wordMap = new SimpleMap<std::string, DictHash>(WORDMAP_HASH_SIZE);
+    wordMap = new SimpleMap<std::string, size_t>(WORDMAP_HASH_SIZE);
     nfa = new Nfa();
 
     addJobs.reserve(1000000);
@@ -539,23 +518,21 @@ void init(std::istream& input)
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr);
 
-    /*size_t wordHash;
-    dict->createWordNfa("ahoj", 0, *nfa, 0, wordHash);
-    //dict->createWordNfa("ahoj cus", 0, *nfa, 1, wordHash);
-    //dict->createWordNfa("ahoj kamo", 0, *nfa, 2, wordHash);
+    /*dict->createWordNfaTwoStep("ahoj", 0, *nfa, 0);
+    dict->createWordNfaTwoStep("aho", 0, *nfa, 0);
+    //dict->createWordNfaTwoStep("ahoj cus", 0, *nfa, 1);
+    //dict->createWordNfaTwoStep("ahoj kamo", 0, *nfa, 2);
 
-    //dict->createWordNfa("cus kamo", 0, *nfa, 3, wordHash);
-    dict->createWordNfa("cus", 0, *nfa, 4, wordHash);
-    dict->createWordNfa("cus ahoj", 0, *nfa, 5, wordHash);
+    //dict->createWordNfaTwoStep("cus kamo", 0, *nfa, 3);
+    dict->createWordNfaTwoStep("cus", 0, *nfa, 4);
+    dict->createWordNfaTwoStep("cus ahoj", 0, *nfa, 5);
 
     NfaVisitor visitor;
     std::vector<std::pair<unsigned int, unsigned int>> results;
 
-    visitor.states[visitor.stateIndex].emplace_back();
-    nfa->feedWord(visitor, 1, results, 6);
-
-    visitor.states[visitor.stateIndex].emplace_back();
-    nfa->feedWord(visitor, 0, results, 6);
+    nfa->feedWord(visitor, "cus", results, 6, true);
+    nfa->feedWord(visitor, " ", results, 6, false);
+    nfa->feedWord(visitor, "ahoj", results, 6, true);
 
     exit(0);*/
     load_init_data(input);
