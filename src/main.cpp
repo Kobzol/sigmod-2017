@@ -109,7 +109,7 @@ void find_in_document(Query& query)
             DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
             if (__builtin_expect(hash != HASH_NOT_FOUND, true))
             {
-                nfa->feedWord(visitor, hash, indices, timestamp, true);
+                nfa->feedWord(visitor, hash, indices, timestamp);
                 for (auto wordInfo : indices)
                 {
                     if (found.find(wordInfo.first) == found.end())
@@ -137,7 +137,7 @@ void find_in_document(Query& query)
     DictHash hash = dict->map.get_hash<false>(prefix, prefixHash);
     if (hash != HASH_NOT_FOUND)
     {
-        nfa->feedWord(visitor, hash, indices, timestamp, true);
+        nfa->feedWord(visitor, hash, indices, timestamp);
         for (auto wordInfo : indices)
         {
             if (found.find(wordInfo.first) == found.end())
@@ -181,7 +181,7 @@ void find_in_document(Query& query)
     writeStringCount += timer.get();
 #endif
 }
-void find_in_document(Query& query, int from, int to, std::vector<std::string>& result)
+/*void find_in_document(Query& query, int from, int to, std::vector<std::string>& result)
 {
     std::vector<Match> matches;
     std::unordered_set<unsigned int> found;
@@ -295,7 +295,7 @@ void find_in_document(Query& query, int from, int to, std::vector<std::string>& 
 #ifdef PRINT_STATISTICS
     writeStringCount += timer.get();
 #endif
-}
+}*/
 
 void delete_ngram(std::string& line, size_t timestamp)
 {
@@ -332,7 +332,7 @@ void query(size_t& queryIndex, size_t timestamp)
 }
 
 static std::string ioResult;
-void batch_split(size_t queryIndex)
+/*void batch_split(size_t queryIndex)
 {
 #ifdef PRINT_STATISTICS
     splitJobsTimer.start();
@@ -453,7 +453,7 @@ void batch_split(size_t queryIndex)
 #ifdef PRINT_STATISTICS
     writeResultTimer.add();
 #endif
-}
+}*/
 void batch(size_t& queryIndex)
 {
 #ifdef PRINT_STATISTICS

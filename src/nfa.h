@@ -151,8 +151,7 @@ public:
         this->createState();    // add root state
     }
 
-    void feedWord(NfaVisitor& visitor, DictHash input, std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp,
-        bool includeStartState)
+    void feedWord(NfaVisitor& visitor, DictHash input, std::vector<std::pair<unsigned int, unsigned int>>& results, size_t timestamp)
     {
         size_t currentStateIndex = visitor.stateIndex;
         size_t nextStateIndex = 1 - currentStateIndex;
@@ -161,10 +160,7 @@ public:
         nextStates.clear();
         results.clear();
 
-        if (includeStartState)
-        {
-            visitor.states[currentStateIndex].emplace_back();
-        }
+        visitor.states[currentStateIndex].emplace_back();
 
         for (NfaIterator& iterator : visitor.states[currentStateIndex])
         {
@@ -217,11 +213,6 @@ public:
     size_t createState()
     {
         LOCK(this->flag);
-        if (__builtin_expect(this->states.size() <= this->stateIndex, false))
-        {
-            this->states.resize((size_t) (this->states.size() * 1.5));
-        }
-
         size_t value = this->stateIndex++;
         UNLOCK(this->flag);
         return value;
